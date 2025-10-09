@@ -1,0 +1,171 @@
+Kmins y Knn desarrollados por nosotros
+En caso de usar librerías tenemos que saber bien que hace
+Normalizar la forma de las fotos
+debe ser representativo para las imágenes que nosotros queramos reconocer
+
+Se debe comenzar tomando algunas fotos para probar para ver como procesarla. Prueba y error
+Debo tener algunos elementos para entrenar la máquina (No recomendable usar esos mismos elementos de los validadores)
+
+
+Debo usar un preprocesamiento bastante mas rígido
+Usar opencv para procesamiento de imágenes
+
+
+Para saber que características son útiles hay que sacar la media y la desviación estándar para cada característica. Para ver cual es mas útil debo ver que la desviación estándar sea muy baja agarro las que tengan una deviación estándar inferior a ..... Sacamos la media para ver que esten muy separadas entre distintas categorías
+Si la característica no cumple, la eliminamos o mejoramos el preprocesamiento
+
+
+Tecnica PCA agarra las características e intentan hacer una transformacion lineal para cambiar el espacio de estados de dimension 5 (suponiendo 5 características) a un espacio bi o tridimensional. Generando valores para que se mantengan invariable los valores de media y desviación... buscar bien como funciona (se pierde informacion, pero intento perder lo menos posible). Esto me permite convertir estos vectores a un sistema en un plano
+
+Sacamos imagen ---> preprocesamiento---> compara datos --->determina a que grupo pertenece
+El KMINS se utiliza con el vector de 5 (mas informacion, mas exactitud, mas facil ver la distancia eucleriana(raiz del cuadrado de las diferencias)) o el de 2 (si el PCA es muy bueno)------> yo prefiero pre PCA. Lo uso solo como herramienta de dibujo
+
+Hay técnicas que permiten obtener mejor la diferencia de los elementos de KMINS. Para tener mayor validez, necesito que cada centroide tenga al menos un elemento. Habría que poner uno como definición. KMINS es un algoritmos de cuando conforme cada uno de los clusters no va a saber que es lo que es. Si elijo el centroide inicial ya sabiendo que éste es un tornillo
+
+Averiguar técnicas que permitan elegir a mano los centroides o elegir aleatoriamente dentro de la base de datos o que los centroides queden aleatoriamente espaciado. Con el KNN no existe este problema
+
+
+
+Tal vez, opcional, presentacion con fast API
+
+
+Libreria para la categorizacion de los audios librosa
+
+
+
+
+🔹 FASE 1 – Comprensión y planificación
+
+Leer y resumir la consigna (definir qué pide cada punto: agente, entorno, algoritmos, entregables).
+
+Definir objetivos concretos del proyecto:
+→ Clasificar piezas mediante visión artificial (K-Means).
+→ Reconocer comandos de voz (K-NN).
+→ Estimar proporciones de la caja (Bayesiano).
+
+Diseñar un diagrama general del sistema (bloques):
+Captura → Procesamiento → Clasificación → Comando por voz → Decisión.
+
+Identificar los módulos principales:
+
+Módulo de visión (imágenes).
+
+Módulo de voz (comandos).
+
+Módulo bayesiano (estimación).
+
+Interfaz principal o consola (control general).
+
+🔹 FASE 2 – Construcción de bases de datos
+
+Base de datos de imágenes:
+
+Tomar al menos 6 imágenes de cada tipo de pieza (tornillo, clavo, arandela, tuerca).
+
+En distintas posiciones e iluminaciones.
+
+Nombrarlas con etiquetas claras (tornillo_1.jpg, etc.).
+
+Base de datos de voz:
+
+Grabar las 3 palabras comando: proporción, contar, salir.
+
+5 personas distintas, varias repeticiones (para KNN).
+
+Guardar los audios en formato .wav o .mp3 con sus etiquetas.
+
+🔹 FASE 3 – Implementación de algoritmos
+
+Módulo de visión (K-Means):
+
+Cargar imágenes y convertirlas a escala de grises.
+
+Extraer características (área, perímetro, momentos de Hu, circularidad, etc.).
+
+Aplicar K-Means para agrupar las piezas en 4 clases.
+
+Guardar etiquetas de clasificación.
+
+Módulo de reconocimiento de voz (KNN):
+
+Extraer características de los audios (MFCC o energía espectral).
+
+Implementar KNN para reconocer las palabras.
+
+Validar con un set de entrenamiento y test.
+
+Módulo bayesiano:
+
+Tomar los resultados de la clasificación de 10 piezas.
+
+Aplicar un clasificador bayesiano para estimar la distribución total de la caja (usando las probabilidades previas de cada tipo).
+
+🔹 FASE 4 – Integración del agente
+
+Integrar los módulos:
+
+Al ejecutar el programa:
+
+Selecciona una caja aleatoria.
+
+Toma 10 imágenes (muestra).
+
+Aplica K-Means → clasifica.
+
+Espera comando por voz → KNN.
+
+Según comando → muestra resultados o sale.
+
+Verificar flujo de ejecución y errores.
+
+🔹 FASE 5 – Elaboración del informe
+
+Redactar el informe con esta estructura (según consigna oficial):
+
+Título
+
+Resumen (≤200 palabras)
+
+Introducción (visión artificial + reconocimiento de voz + problema)
+
+Especificación del agente (tipo, tabla REAS, entorno)
+
+Diseño del agente (explicación de algoritmos)
+
+Código (fragmentos relevantes)
+
+Ejemplo de aplicación (resultados con capturas)
+
+Resultados y estadísticas
+
+Conclusiones
+
+Bibliografía y prompts usados
+
+Armar los anexos:
+
+Diagramas de bloques.
+
+Capturas del sistema en funcionamiento.
+
+Gráficos de clasificación y resultados de KMeans/KNN.
+
+🔹 FASE 6 – Presentación
+
+Preparar defensa oral:
+
+Explicar los 3 algoritmos (K-Means, KNN, Bayesiano).
+
+Mostrar ejemplos reales.
+
+Destacar cómo interactúan los tres subsistemas.
+
+Verificar entrega final:
+
+Informe PDF.
+
+Código fuente.
+
+Bases de datos (imágenes y audios).
+
+https://www.youtube.com/watch?v=eGgESrWLV8s
