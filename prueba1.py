@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 
 # === Nombre del archivo (modificá según la imagen que quieras probar) ===
-nombre_imagen = "base_datos_0/IMG_2794.JPG"
-
+#nombre_imagen = "base_datos_0/IMG_2765.JPG"
+nombre_imagen = "base_datos_0/IMG_2771.JPG"
 # === Leer la imagen ===
 img = cv2.imread(nombre_imagen)
 
