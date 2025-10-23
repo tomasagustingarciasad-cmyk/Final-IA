@@ -1,42 +1,49 @@
-# test_tornillo.py
 import cv2
-from procesado_imagen import escalar, preprocesar_imagen, binarizar_robusto, morfologia_conservadora,detectar_contornos, dibujar_contornos
+import numpy as np
+from procesado_imagen import (
+    escalar, preprocesar_imagen, binarizar_robusto,
+    morfologia_conservadora, componente_principal, rellenar_huecos,
+    detectar_contornos, dibujar_contornos, edge_guided_fix
+)
 
-# Ruta de imagen
-nombre_imagen = "base_datos/Tornillo/Tornillo_1.JPG"
-# nombre_imagen = "base_datos/Tuerca/Tuerca_3.JPG"
-# nombre_imagen = "base_datos/Tornillo/Tornillo_1.JPG"
-# nombre_imagen = "base_datos/Clavo/Clavo_2.JPG"
-# nombre_imagen = "base_datos/Arandela/Arandela_5.JPG"
-
-# Cargar imagen
-img = cv2.imread(nombre_imagen)
+# Cambiá la ruta/clase a gusto
+img_path = "base_datos/Tornillo/Tornillo_4.JPG"
+#img_path = "base_datos/Arandela/Arandela_2.JPG"
+img = cv2.imread(img_path)
 if img is None:
-    print(f"Error: No se pudo cargar {nombre_imagen}")
-    exit()
+    print("No se pudo leer:", img_path); raise SystemExit
 
-print("Procesando imagen...")
+# 1) Gris + sombra atenuada (parámetros que ya funcionaban)
+gray, gray_atenuado = preprocesar_imagen(
+    img, fuerza=1.2, radio_borde=0.025, sigma_ilum=0.20
+)
 
-# Paso 1: preprocesar
-gray = preprocesar_imagen(img)
+# 2) Binarización estable
+binary = binarizar_robusto(gray_atenuado)
 
-# Paso 2: binarizar
-binary = binarizar_robusto(gray)
+# 3) Limpieza morfológica
+binary = morfologia_conservadora(binary)
 
-# Paso 3: morfología
-binary_final = morfologia_conservadora(binary)
+# 4) Conservar objeto y RELLENAR (clave para Hu)
+binary = componente_principal(binary)
 
-contornos = detectar_contornos(binary)         # contornos
-vis = dibujar_contornos(img, contornos)        # visualización
+binary = edge_guided_fix(gray, binary, r=2, min_edge_ratio=0.04,
+                           canny_low=20, canny_high=60)
 
-print("Binarización completada.")
+binary_filled = rellenar_huecos(binary)
 
-# Mostrar resultados
+# 5) Contornos para visualización
+contornos = detectar_contornos(binary_filled)
+vis = dibujar_contornos(img, contornos)
+
+# Debug corto (opcional)
+print("mean(gray_atenuado):", np.mean(gray_atenuado))
+print("pix binarios:", cv2.countNonZero(binary), "/", binary.size)
+
+# --- Mostrar ---
 cv2.imshow("Original", escalar(img))
-cv2.imshow("Preprocesada", escalar(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)))
-cv2.imshow("Binarizada", escalar(cv2.cvtColor(binary_final, cv2.COLOR_GRAY2BGR)))
+cv2.imshow("Gris atenuado", escalar(cv2.cvtColor(gray_atenuado, cv2.COLOR_GRAY2BGR)))
+cv2.imshow("Máscara final (rellena)", escalar(cv2.cvtColor(binary_filled, cv2.COLOR_GRAY2BGR)))
 cv2.imshow("Contornos", escalar(vis))
-
-
 cv2.waitKey(0)
 cv2.destroyAllWindows()

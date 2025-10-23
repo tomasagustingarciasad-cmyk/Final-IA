@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 
+# ================= Utilidad =================
+
 def escalar(imagen, max_ancho=1280, max_alto=720):
     h, w = imagen.shape[:2]
     s = min(max_ancho / w, max_alto / h, 1.0)
@@ -8,99 +10,172 @@ def escalar(imagen, max_ancho=1280, max_alto=720):
         imagen = cv2.resize(imagen, (int(w*s), int(h*s)), interpolation=cv2.INTER_AREA)
     return imagen
 
-def preprocesar_imagen(img, fuerza=1.2, radio_borde=0.03, sigma_ilum=0.2):
+
+# ============== 1) Preprocesado: gris + atenuación de sombra ==============
+
+def preprocesar_imagen(img, fuerza=1.2, radio_borde=0.025, sigma_ilum=0.20):
     """
-    Pasa a gris y atenúa la sombra del fondo SIN alterar el tono del elemento.
-    Devuelve: (gray, gray_atenuado)
-    - fuerza: 0.6–1.4 cuánta corrección aplicar en el fondo
-    - radio_borde: ~0.01–0.02 del lado menor; zona donde NO corregimos (borde del objeto)
-    - sigma_ilum: ~0.08–0.15 del lado menor; tamaño para estimar iluminación de fondo
+    Devuelve (gray, gray_atenuado): gris original y gris con sombra atenuada,
+    preservando el tono del metal.
     """
-    # Gris original para comparar/salir
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # 1) LAB y canal L (luminancia) para no tocar cromas
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     L, A, B = cv2.split(lab)
     h, w = L.shape
 
-    # Tamaños relativos (robustos a distintos tamaños)
-    k_dil = max(7,  (int(min(h, w) * 0.0125) | 1))  # ≈ lado*1.25%
-    k_med = max(21, (int(min(h, w) * sigma_ilum) | 1))  # controla “lo grande” de la sombra
+    # Tamaños relativos
+    k_dil = max(7,  (int(min(h, w) * 0.0125) | 1))
+    k_med = max(21, (int(min(h, w) * sigma_ilum) | 1))
     r_borde = max(3, int(min(h, w) * radio_borde))
 
-    # 2) Estimación de iluminación (método tipo snippet: dilate+median)
+    # Iluminación de fondo (dilate + median)
     dilated = cv2.dilate(L, np.ones((k_dil, k_dil), np.uint8))
     bg      = cv2.medianBlur(dilated, k_med)
     diff    = 255 - cv2.absdiff(L, bg)
     L_corr  = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-    # 3) Máscara de proximidad al borde: no corregir pegado al objeto
-    edges = cv2.Canny(L, 50, 150)
-    Kb    = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*r_borde+1, 2*r_borde+1))
-    prox  = cv2.dilate(edges, Kb, iterations=1)  # borde engrosado
-    wmap  = 1.0 - cv2.GaussianBlur(prox/255.0, (0,0), r_borde/2)  # 1=fondo, 0=borde
-    wmap  = np.clip(wmap, 0.0, 1.0).astype(np.float32)
+    # Máscara de sombra (bg > L)
+    shadow_raw  = cv2.subtract(bg, L).astype(np.int16)
+    shadow_raw[shadow_raw < 0] = 0
+    tau = max(8, int(np.percentile(shadow_raw, 90) * 0.25))
+    mask_shadow = (shadow_raw > tau).astype(np.float32)
+    r_shadow = max(5, int(min(h, w) * 0.02))
+    mask_shadow = cv2.GaussianBlur(mask_shadow, (0, 0), r_shadow)
 
-    # 4) Fusión: aplicar corrección solo en el fondo, con “fuerza” ajustable
+    # Protección de borde
+    edges = cv2.Canny(L, 50, 150)
+    Kb = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*r_borde+1, 2*r_borde+1))
+    prox = cv2.dilate(edges, Kb, iterations=1)
+    wmap_borde = 1.0 - cv2.GaussianBlur(prox/255.0, (0, 0), r_borde/2)
+    wmap_borde = np.clip(wmap_borde, 0.0, 1.0)
+
+    # Corregir sólo donde hay sombra y lejos del borde
+    wmap = np.maximum(wmap_borde, mask_shadow).astype(np.float32)
+
+    # Fusión con tope por píxel
     Lf = L.astype(np.float32)
     Lc = L_corr.astype(np.float32)
-    L_blend = Lf + wmap * fuerza * (Lc - Lf)          # preserva tono en el objeto
+    delta = np.clip(Lc - Lf, 0, 60)
+    L_blend = Lf + wmap * fuerza * delta
     L_blend = np.clip(L_blend, 0, 255).astype(np.uint8)
 
-    # 5) Suavizado leve para estabilizar
+    # Suavizado leve
     L_final = cv2.GaussianBlur(L_blend, (5, 5), 0)
 
-    # 6) Reconstrucción y salida en gris atenuado
-    lab_final     = cv2.merge((L_final, A, B))
+    lab_final = cv2.merge((L_final, A, B))
     img_corregida = cv2.cvtColor(lab_final, cv2.COLOR_LAB2BGR)
     gray_atenuado = cv2.cvtColor(img_corregida, cv2.COLOR_BGR2GRAY)
 
     return gray, gray_atenuado
 
+
+# ============== 2) Binarización robusta (selección automática) ==============
+
 def binarizar_robusto(gray_atenuado):
-    """Binarización combinando varios métodos"""
-    binary_gauss = cv2.adaptiveThreshold(
-        gray_atenuado, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV,
-        blockSize=51,
-        C=8
-    )
+    """
+    Probamos varias máscaras (adaptativas y Otsu, con y sin inversión) y
+    elegimos la que deja mayor componente externo. Fallback con Canny.
+    """
+    h, w = gray_atenuado.shape
+    pre = cv2.GaussianBlur(gray_atenuado, (7, 7), 0)
 
-    binary_mean = cv2.adaptiveThreshold(
-        gray_atenuado, 255,
-        cv2.ADAPTIVE_THRESH_MEAN_C,
-        cv2.THRESH_BINARY_INV,
-        blockSize=51,
-        C=8
-    )
+    blockSize = max(61, (min(h, w) // 14) | 1)  # valor que te funcionaba bien
+    C = 4
 
-    blur = cv2.GaussianBlur(gray_atenuado, (5, 5), 0) 
-    _, binary_otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    #_, binary_otsu = cv2.threshold(blur, 150, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    bin_gauss_inv = cv2.adaptiveThreshold(pre, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                          cv2.THRESH_BINARY_INV, blockSize, C)
+    bin_mean_inv  = cv2.adaptiveThreshold(pre, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                          cv2.THRESH_BINARY_INV, blockSize, C)
+    _, bin_otsu_inv = cv2.threshold(pre, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-    binary_combinada = cv2.bitwise_and(binary_gauss, binary_mean)
-    binary_combinada = cv2.bitwise_and(binary_combinada, binary_otsu)
-    binary_combinada = cv2.medianBlur(binary_combinada, 5)
+    bin_gauss = cv2.adaptiveThreshold(pre, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                      cv2.THRESH_BINARY, blockSize, C)
+    bin_mean  = cv2.adaptiveThreshold(pre, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                      cv2.THRESH_BINARY, blockSize, C)
+    _, bin_otsu = cv2.threshold(pre, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    if cv2.countNonZero(binary_combinada) > (binary_combinada.size // 2):
-        binary_combinada = cv2.bitwise_not(binary_combinada)
-    
-    return binary_combinada
+    candidatas = [bin_gauss_inv, bin_mean_inv, bin_otsu_inv, bin_gauss, bin_mean, bin_otsu]
 
+    def score(mask):
+        cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not cnts:
+            return 0.0
+        return max(cv2.contourArea(c) for c in cnts) / (h * w)
+
+    scores = [score(m) for m in candidatas]
+    idx = int(np.argmax(scores))
+    binary = candidatas[idx]
+    best = scores[idx]
+
+    if best < 0.0008:
+        edges = cv2.Canny(pre, 40, 120)
+        K = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        edges = cv2.dilate(edges, K, iterations=2)
+        binary = np.zeros_like(edges)
+        cnts, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if cnts:
+            cv2.drawContours(binary, cnts, -1, 255, thickness=cv2.FILLED)
+
+    binary = cv2.medianBlur(binary, 5)
+    if cv2.countNonZero(binary) > (binary.size // 2):
+        binary = cv2.bitwise_not(binary)
+
+    return binary
+
+
+# ============== 3) Limpieza morfológica y refinado para Hu ==============
 
 def morfologia_conservadora(binary):
-    """Operaciones morfológicas para limpieza"""
     h, w = binary.shape
-    k = max(3, min(7, (min(h, w) // 400) | 1))
+    area_ratio = cv2.countNonZero(binary) / float(h * w)
+
+    # kernel un poco menor y siempre impar
+    k = max(3, int(min(h, w) * 0.012))
+    if k % 2 == 0: k += 1
+    k = min(k, 21)
     K = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
-    result = cv2.morphologyEx(binary, cv2.MORPH_OPEN, K, iterations=1)
-    result = cv2.morphologyEx(result, cv2.MORPH_CLOSE, K, iterations=1)
+
+    # Si el objeto es pequeño, no hagas OPEN (suele “morder” el borde)
+    if area_ratio < 0.03:
+        result = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, K, iterations=2)
+    else:
+        result = cv2.morphologyEx(binary, cv2.MORPH_OPEN,  K, iterations=1)
+        result = cv2.morphologyEx(result, cv2.MORPH_CLOSE, K, iterations=2)
+
     return result
 
-def detectar_contornos(binary, min_area_ratio=0.005):
-    """Devuelve contornos externos relevantes (lista ordenada por área desc)"""
+
+
+def componente_principal(binary):
+    """Conserva sólo el componente conexo de mayor área."""
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    if num_labels <= 1:
+        return binary
+    largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+    out = np.zeros_like(binary)
+    out[labels == largest_label] = 255
+    return out
+
+
+
+
+def rellenar_huecos(binary):
+    """
+    Rellena huecos internos del objeto (ideal para tornillos con brillo).
+    Para arandelas, desactivar para conservar el agujero.
+    """
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    filled = np.zeros_like(binary)
+    if contours:
+        cv2.drawContours(filled, contours, -1, 255, thickness=cv2.FILLED)
+    return filled
+
+
+# ============== 4) Contornos (visualización) ==============
+
+def detectar_contornos(binary, min_area_ratio=0.0001):
+    """Contornos externos relevantes (ordenados por área desc)."""
     h, w = binary.shape
     area_min = min_area_ratio * (h * w)
     contornos, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -108,12 +183,13 @@ def detectar_contornos(binary, min_area_ratio=0.005):
     contornos.sort(key=cv2.contourArea, reverse=True)
     return contornos
 
+
 def dibujar_contornos(img, contornos, color=(0, 255, 0), grosor=2, bbox=True):
-    """Dibuja contornos (y bbox opcional)"""
-    img_dibujada = img.copy()
-    cv2.drawContours(img_dibujada, contornos, -1, color, grosor)
+    """Dibuja contornos y (opcional) su bounding box."""
+    vis = img.copy()
+    cv2.drawContours(vis, contornos, -1, color, grosor)
     if bbox:
         for c in contornos:
             x, y, w, h = cv2.boundingRect(c)
-            cv2.rectangle(img_dibujada, (x, y), (x + w, y + h), (0, 255, 255), 2)
-    return img_dibujada
+            cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 255), 2)
+    return vis

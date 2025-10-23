@@ -1,23 +1,46 @@
 import cv2
-from procesado_img import escalar, preprocesar_imagen, binarizar_robusto, morfologia_conservadora, detectar_contornos, dibujar_contornos
+import numpy as np
+from procesado_img import (
+    escalar, preprocesar_imagen, binarizar_robusto,
+    morfologia_conservadora, componente_principal, rellenar_huecos,
+    detectar_contornos, dibujar_contornos
+)
 
-img_path = "base_datos/Tornillo/Tornillo_2.JPG"  # cambialo según quieras
+# Cambiá la ruta/clase a gusto
+img_path = "base_datos/Tornillo/Tornillo_4.JPG"
+#img_path = "base_datos/Arandela/Arandela_2.JPG"
 img = cv2.imread(img_path)
 if img is None:
     print("No se pudo leer:", img_path); raise SystemExit
 
-gray, gray_atenuado = preprocesar_imagen(img, fuerza=1.2, radio_borde=0.015, sigma_ilum=0.12)
+# 1) Gris + sombra atenuada (parámetros que ya funcionaban)
+gray, gray_atenuado = preprocesar_imagen(
+    img, fuerza=1.2, radio_borde=0.025, sigma_ilum=0.20
+)
+
+# 2) Binarización estable
 binary = binarizar_robusto(gray_atenuado)
-binary_final = morfologia_conservadora(binary)
-contornos = detectar_contornos(binary_final)
+
+# 3) Limpieza morfológica
+binary = morfologia_conservadora(binary)
+
+# 4) Conservar objeto y RELLENAR (clave para Hu)
+binary = componente_principal(binary)
+
+binary_filled = rellenar_huecos(binary)
+
+# 5) Contornos para visualización
+contornos = detectar_contornos(binary_filled)
 vis = dibujar_contornos(img, contornos)
 
-cv2.imshow("Original", escalar(img))
-#cv2.imshow("Gris", escalar(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)))
-cv2.imshow("Gris (sombra atenuada)", escalar(cv2.cvtColor(gray_atenuado, cv2.COLOR_GRAY2BGR)))
-#cv2.imshow("Binarizada", escalar(cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)))
-#cv2.imshow("Binarizada (final)", escalar(cv2.cvtColor(binary_final, cv2.COLOR_GRAY2BGR)))
-cv2.imshow("Contornos", escalar(vis))
+# Debug corto (opcional)
+print("mean(gray_atenuado):", np.mean(gray_atenuado))
+print("pix binarios:", cv2.countNonZero(binary), "/", binary.size)
 
-cv2.waitKey(0); 
+# --- Mostrar ---
+cv2.imshow("Original", escalar(img))
+cv2.imshow("Gris atenuado", escalar(cv2.cvtColor(gray_atenuado, cv2.COLOR_GRAY2BGR)))
+cv2.imshow("Máscara final (rellena)", escalar(cv2.cvtColor(binary_filled, cv2.COLOR_GRAY2BGR)))
+cv2.imshow("Contornos", escalar(vis))
+cv2.waitKey(0)
 cv2.destroyAllWindows()
