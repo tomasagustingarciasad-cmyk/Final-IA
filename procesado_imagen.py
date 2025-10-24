@@ -13,7 +13,7 @@ def escalar(imagen, max_ancho=1280, max_alto=720):
 
 # ============== 1) Preprocesado: gris + atenuación de sombra ==============
 
-def preprocesar_imagen(img, fuerza=1.2, radio_borde=0.025, sigma_ilum=0.20):
+def preprocesar_imagen(img, fuerza=1.5, radio_borde=0.01, sigma_ilum=0.20):
     """
     Devuelve (gray, gray_atenuado): gris original y gris con sombra atenuada,
     preservando el tono del metal.
@@ -78,7 +78,7 @@ def binarizar_robusto(gray_atenuado):
     elegimos la que deja mayor componente externo. Fallback con Canny.
     """
     h, w = gray_atenuado.shape
-    pre = cv2.GaussianBlur(gray_atenuado, (7, 7), 0)
+    pre = cv2.GaussianBlur(gray_atenuado, (5, 5), 0)
 
     blockSize = max(61, (min(h, w) // 14) | 1)  # valor que te funcionaba bien
     C = 4
@@ -157,59 +157,6 @@ def componente_principal(binary):
     out[labels == largest_label] = 255
     return out
 
-
-def edge_guided_fix(
-    gray, binary,
-    r=2,                         # grosor de la banda exterior (2–3 px)
-    min_edge_ratio=0.06,         # % de borde en la banda para activar
-    canny_low=40, canny_high=120,
-    cierre_iter=1,
-    max_added_ratio=0.08         # guardrail: expansión máxima permitida
-):
-    """
-    Corrige 'mordidas' del contorno usando el borde del gris original.
-    Devuelve una máscara binaria del mismo tamaño que 'binary'.
-
-    - No toca nada si en la banda exterior no hay borde suficiente.
-    - A lo sumo agrega 'r' píxeles hacia afuera.
-    """
-    # --- 1) Borde robusto (gradiente morfológico + Canny + closing) ---
-    g = cv2.GaussianBlur(gray, (5, 5), 0)
-    K3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-
-    grad = cv2.morphologyEx(g, cv2.MORPH_GRADIENT, K3)
-    _, e_grad = cv2.threshold(grad, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    e_canny = cv2.Canny(g, canny_low, canny_high)
-
-    edges = cv2.bitwise_or(e_grad, e_canny)
-    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, K3, iterations=cierre_iter)
-
-    # --- 2) Banda exterior alrededor de tu máscara actual ---
-    Kr = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*r+1, 2*r+1))
-    dil = cv2.dilate(binary, Kr, iterations=1)
-    ring = cv2.subtract(dil, binary)               # solo la corona exterior
-    ring_nz = cv2.countNonZero(ring)
-    if ring_nz == 0:
-        return binary.copy()
-
-    # --- 3) ¿Hay borde real en la banda? si no, no tocamos nada ---
-    ring_edges = cv2.bitwise_and(edges, edges, mask=ring)
-    ratio = cv2.countNonZero(ring_edges) / ring_nz
-    if ratio < min_edge_ratio:
-        return binary.copy()
-
-    # --- 4) Expandir solo donde hay borde en la banda ---
-    mask_edge = ring_edges.copy()
-
-    # Guardrail: no crecer demasiado por ruido
-    added_ratio = cv2.countNonZero(mask_edge) / max(1, cv2.countNonZero(binary))
-    if added_ratio > max_added_ratio:
-        return binary.copy()
-
-    # Unión y salida (sin rellenar: eso lo hacés después como siempre)
-    binary_fix = cv2.bitwise_or(binary, mask_edge)
-    return binary_fix
 
 
 

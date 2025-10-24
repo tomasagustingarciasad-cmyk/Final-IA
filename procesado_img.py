@@ -13,61 +13,94 @@ def escalar(imagen, max_ancho=1280, max_alto=720):
 
 # ============== 1) Preprocesado: gris + atenuación de sombra ==============
 
-def preprocesar_imagen(img, fuerza=1.2, radio_borde=0.025, sigma_ilum=0.20):
+import cv2
+import numpy as np
+
+def preprocesar_imagen(img, fuerza=None, radio_borde=0.02, sigma_ilum=0.16,
+                       target_bg=210, gamma_borde=1.7, delta_max_px=60):
     """
-    Devuelve (gray, gray_atenuado): gris original y gris con sombra atenuada,
-    preservando el tono del metal.
+    Devuelve (gray, gray_atenuado). Corrige sombras del fondo preservando tono
+    del metal y con seguridad anti-'engorde'.
+
+    - fuerza=None  -> se autoajusta por imagen (recomendado)
+      (si pasás un valor, se respeta pero se clampea internamente)
+    - radio_borde: 0.02–0.03 para tornillos pequeños; 0.015–0.02 si ocupan gran parte
+    - sigma_ilum: 0.12–0.20 (>=0.18 gatilla ruta 'downscale' de la mediana)
     """
+    # 0) Grises y L* en LAB
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    lab  = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    L,A,B = cv2.split(lab)
+    h,w   = L.shape
 
-    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    L, A, B = cv2.split(lab)
-    h, w = L.shape
+    # --- tamaños
+    k_dil   = max(7,  (int(min(h,w)*0.0125) | 1))
+    k_raw   = int(min(h,w)*sigma_ilum) | 1
 
-    # Tamaños relativos
-    k_dil = max(7,  (int(min(h, w) * 0.0125) | 1))
-    k_med = max(21, (int(min(h, w) * sigma_ilum) | 1))
-    r_borde = max(3, int(min(h, w) * radio_borde))
-
-    # Iluminación de fondo (dilate + median)
+    # 1) Estimar fondo con mediana 'grande' sin romper AVX (k<16)
     dilated = cv2.dilate(L, np.ones((k_dil, k_dil), np.uint8))
-    bg      = cv2.medianBlur(dilated, k_med)
-    diff    = 255 - cv2.absdiff(L, bg)
-    L_corr  = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    if k_raw <= 15:
+        bg = cv2.medianBlur(dilated, max(3,k_raw))
+    else:
+        s = max(15.0/k_raw, 0.1)  # factor de reducción
+        small  = cv2.resize(dilated, (max(1,int(w*s)), max(1,int(h*s))), interpolation=cv2.INTER_AREA)
+        bg_sm  = cv2.medianBlur(small, 15)
+        bg     = cv2.resize(bg_sm, (w,h), interpolation=cv2.INTER_LINEAR)
 
-    # Máscara de sombra (bg > L)
-    shadow_raw  = cv2.subtract(bg, L).astype(np.int16)
-    shadow_raw[shadow_raw < 0] = 0
-    tau = max(8, int(np.percentile(shadow_raw, 90) * 0.25))
-    mask_shadow = (shadow_raw > tau).astype(np.float32)
-    r_shadow = max(5, int(min(h, w) * 0.02))
-    mask_shadow = cv2.GaussianBlur(mask_shadow, (0, 0), r_shadow)
+    diff   = 255 - cv2.absdiff(L, bg)
+    L_corr = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-    # Protección de borde
+    # 2) Máscara de sombra real (sólo aclarar donde bg>L)
+    shadow = cv2.subtract(bg, L).astype(np.int16)
+    shadow[shadow<0] = 0
+    tau = max(8, int(np.percentile(shadow, 90)*0.25))
+    mask_shadow = (shadow > tau).astype(np.float32)
+    r_shadow = max(5, int(min(h,w)*0.02))
+    mask_shadow = cv2.GaussianBlur(mask_shadow, (0,0), r_shadow)
+
+    # 3) Protección de borde (más dura, usando exponente gamma)
+    r_borde_px = max(3, int(min(h,w)*radio_borde))
     edges = cv2.Canny(L, 50, 150)
-    Kb = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*r_borde+1, 2*r_borde+1))
-    prox = cv2.dilate(edges, Kb, iterations=1)
-    wmap_borde = 1.0 - cv2.GaussianBlur(prox/255.0, (0, 0), r_borde/2)
-    wmap_borde = np.clip(wmap_borde, 0.0, 1.0)
+    Kb    = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*r_borde_px+1, 2*r_borde_px+1))
+    prox  = cv2.dilate(edges, Kb, iterations=1)              # 255 en contorno grueso
+    w_borde = 1.0 - cv2.GaussianBlur(prox/255.0, (0,0), r_borde_px/2.0)
+    w_borde = np.clip(w_borde, 0.0, 1.0) ** gamma_borde      # cae más cerca del borde
 
-    # Corregir sólo donde hay sombra y lejos del borde
-    wmap = np.maximum(wmap_borde, mask_shadow).astype(np.float32)
+    # 4) Peso final: sólo fondo y lejos del borde
+    wmap = (mask_shadow * w_borde).astype(np.float32)
 
-    # Fusión con tope por píxel
+    # 5) Auto-fuerza (opcional) para unificar fondo
     Lf = L.astype(np.float32)
     Lc = L_corr.astype(np.float32)
-    delta = np.clip(Lc - Lf, 0, 60)
-    L_blend = Lf + wmap * fuerza * delta
+    delta = np.clip(Lc - Lf, 0, float(delta_max_px))         # tope por píxel
+
+    if fuerza is None:
+        # fondo = lejos de bordes (w_borde alto) y con sombra (mask_shadow alto)
+        bgmask = (wmap > 0.4).astype(np.uint8)
+        n = cv2.countNonZero(bgmask)
+        if n > 0:
+            mean_bg  = float(np.mean(L[bgmask==1]))
+            mean_cor = float(np.mean((Lf + delta)[bgmask==1]))
+            disp     = max(1.0, mean_cor - mean_bg)          # cuánto puedo subir
+            need     = float(target_bg - mean_bg)
+            auto_f   = np.clip(need/disp, 0.9, 1.5)          # límites seguros
+        else:
+            auto_f = 1.2                                     # fallback
+    else:
+        auto_f = float(np.clip(fuerza, 0.9, 1.5))            # clamp
+
+    # 6) Fusión
+    L_blend = Lf + wmap * auto_f * delta
     L_blend = np.clip(L_blend, 0, 255).astype(np.uint8)
 
-    # Suavizado leve
-    L_final = cv2.GaussianBlur(L_blend, (5, 5), 0)
+    # 7) Suavizado leve y salida
+    L_final = cv2.GaussianBlur(L_blend, (5,5), 0)
+    lab_out = cv2.merge((L_final, A, B))
+    img_out = cv2.cvtColor(lab_out, cv2.COLOR_LAB2BGR)
+    gray_out = cv2.cvtColor(img_out, cv2.COLOR_BGR2GRAY)
 
-    lab_final = cv2.merge((L_final, A, B))
-    img_corregida = cv2.cvtColor(lab_final, cv2.COLOR_LAB2BGR)
-    gray_atenuado = cv2.cvtColor(img_corregida, cv2.COLOR_BGR2GRAY)
+    return gray, gray_out
 
-    return gray, gray_atenuado
 
 
 # ============== 2) Binarización robusta (selección automática) ==============
@@ -78,7 +111,7 @@ def binarizar_robusto(gray_atenuado):
     elegimos la que deja mayor componente externo. Fallback con Canny.
     """
     h, w = gray_atenuado.shape
-    pre = cv2.GaussianBlur(gray_atenuado, (7, 7), 0)
+    pre = cv2.GaussianBlur(gray_atenuado, (5, 5), 0)
 
     blockSize = max(61, (min(h, w) // 14) | 1)  # valor que te funcionaba bien
     C = 4
@@ -159,6 +192,74 @@ def componente_principal(binary):
 
 
 
+def deslumbrado_anillo(
+    gray, mask_obj,
+    ring_px=9,          # banda interna ancha (tuerca brillante)
+    k_rel=0.06,         # kernel relativo del top-hat (6%)
+    frac=0.80,          # “dureza” al restar top-hat
+    trigger_sigma=1.5,  # sensibilidad para detectar hot spots
+    min_ratio=0.006,    # activar si al menos 0.6% de la banda es “hot”
+    max_ratio=0.40,     # seguridad: si >40% brilla, no tocar
+    edge_clear_px=1,    # no tocar el borde inmediato
+    delta_cap=22        # tope de decremento por píxel
+):
+    h, w = gray.shape
+
+    # 1) banda interna (anillo) y “anillo seguro” (sin el 1 px pegado al borde)
+    r = max(1, int(ring_px))
+    Kr = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*r+1, 2*r+1))
+    inner_full = cv2.subtract(mask_obj, cv2.erode(mask_obj, Kr, iterations=1))
+    if cv2.countNonZero(inner_full) == 0:
+        return gray
+
+    if edge_clear_px > 0:
+        Kedge = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*edge_clear_px+1, 2*edge_clear_px+1))
+        inner_safe = cv2.erode(inner_full, Kedge, iterations=1)
+    else:
+        inner_safe = inner_full
+
+    area_inner = cv2.countNonZero(inner_safe)
+    if area_inner == 0:
+        return gray
+
+    # 2) detectar “hot spots” (especulares) SÓLO dentro del anillo seguro
+    vals = gray[inner_safe.astype(bool)]
+    mu, sigma = float(vals.mean()), float(vals.std())
+    thr = mu + trigger_sigma * sigma
+    hot = np.zeros_like(gray, np.uint8)
+    hot[(gray > thr) & (inner_safe > 0)] = 255
+
+    ratio_hot = cv2.countNonZero(hot) / float(area_inner)
+    if ratio_hot < min_ratio or ratio_hot > max_ratio:
+        # muy poco ⇒ no hace falta; demasiado ⇒ mejor no tocar
+        return gray
+
+    # 3) White top-hat para aislar puntas especulares
+    k = max(3, int(min(h, w) * k_rel))
+    if k % 2 == 0: k += 1
+    k = min(k, 31)
+    K = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    opened = cv2.morphologyEx(gray, cv2.MORPH_OPEN, K)
+    tophat = cv2.subtract(gray, opened)
+
+    # aplicar SOLO donde hay “hot” dentro del anillo
+    tophat = cv2.bitwise_and(tophat, hot)
+
+    g32  = gray.astype(np.float32)
+    th32 = tophat.astype(np.float32)
+
+    # 4) corrección con tope por píxel
+    dec   = np.minimum(frac * th32, float(delta_cap))
+    g_fix = g32 - dec
+
+    # 5) anti-mordida: no dejes que el valor quede debajo de la mediana local
+    med = np.median(vals)  # mediana en la banda
+    g_fix[inner_safe > 0] = np.maximum(g_fix[inner_safe > 0], med - 8)
+
+    g_fix = np.clip(g_fix, 0, 255).astype(np.uint8)
+    return g_fix
+
+
 
 def rellenar_huecos(binary):
     """
@@ -193,3 +294,63 @@ def dibujar_contornos(img, contornos, color=(0, 255, 0), grosor=2, bbox=True):
             x, y, w, h = cv2.boundingRect(c)
             cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 255, 255), 2)
     return vis
+def rellenar_mordidas(mask, max_depth_px=8):
+    # 1) mayor contorno
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts: 
+        return mask
+    c = max(cnts, key=cv2.contourArea)
+
+    # 2) casco convexo (hull) rasterizado
+    hull = cv2.convexHull(c)
+    hull_mask = np.zeros_like(mask)
+    cv2.drawContours(hull_mask, [hull], -1, 255, thickness=cv2.FILLED)
+
+    # 3) “gap” = zonas dentro del hull pero fuera de la máscara (son las concavidades)
+    gap = cv2.bitwise_and(hull_mask, cv2.bitwise_not(mask))
+
+    # 4) profundidad de concavidad por distancia a la frontera de la pieza
+    dist = cv2.distanceTransform(255 - mask, cv2.DIST_L2, 3)
+
+    # 5) rellenar solo concavidades superficiales (≤ max_depth_px)
+    fill = (gap > 0) & (dist <= max_depth_px)
+
+    out = mask.copy()
+    out[fill] = 255
+    return out
+
+
+def cerrar_muescas_local(mask, r_close=3, max_depth_px=9):
+    """
+    Cierra muescas finas pegadas al borde sin engordar la pieza:
+    - hace un closing suave (r_close)
+    - sólo agrega píxeles que estén dentro del casco convexo (hull)
+    - y cuya profundidad de concavidad sea <= max_depth_px
+    """
+    # 0) mayor contorno
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return mask
+    c = max(cnts, key=cv2.contourArea)
+
+    # 1) casco convexo
+    hull = cv2.convexHull(c)
+    hull_mask = np.zeros_like(mask)
+    cv2.drawContours(hull_mask, [hull], -1, 255, thickness=cv2.FILLED)
+
+    # 2) closing suave
+    K = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*r_close+1, 2*r_close+1))
+    closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, K, iterations=1)
+    add = cv2.subtract(closed, mask)
+
+    # 3) sólo dentro del hull y con concavidad “poca” (profundidad <= max_depth_px)
+    gap   = cv2.bitwise_and(hull_mask, cv2.bitwise_not(mask))
+    dist  = cv2.distanceTransform(255 - mask, cv2.DIST_L2, 3)
+    shallow = (dist <= max_depth_px).astype(np.uint8) * 255
+
+    add_sel = cv2.bitwise_and(add, gap)
+    add_sel = cv2.bitwise_and(add_sel, shallow)
+
+    out = mask.copy()
+    out[add_sel > 0] = 255
+    return out
