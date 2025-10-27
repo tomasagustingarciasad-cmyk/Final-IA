@@ -354,3 +354,96 @@ def cerrar_muescas_local(mask, r_close=3, max_depth_px=9):
     out = mask.copy()
     out[add_sel > 0] = 255
     return out
+
+
+# --------- Medidas geométricas del contorno y decisión de forma ----------
+def medidas_forma(mask):
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return dict(area=0, perim=1.0, circ=0.0, elong=999.0, solidity=0.0, extent=0.0, wh=(1,1))
+    c = max(cnts, key=cv2.contourArea)
+
+    area = cv2.contourArea(c)
+    perim = cv2.arcLength(c, True) or 1.0
+    x, y, w, h = cv2.boundingRect(c)
+
+    circ = 4.0 * np.pi * area / (perim * perim)       # 1.0 sería un círculo perfecto
+    elong = max(w, h) / max(1.0, min(w, h))           # relación de aspecto
+    hull = cv2.convexHull(c)
+    hull_area = cv2.contourArea(hull) or 1.0
+    solidity = area / hull_area                        # 1.0 si es convexo “llenito”
+    extent = area / float(w * h)                       # cuán lleno está el bbox
+
+    return dict(area=area, perim=perim, circ=circ, elong=elong,
+                solidity=solidity, extent=extent, wh=(w, h))
+
+def es_pieza_compacta(m):
+    """
+    True para tuercas/arandelas (compactas), False para tornillos/clavos (alargados).
+    """
+    return (m["elong"] < 1.6 and m["circ"] > 0.50) or \
+           (m["elong"] < 1.8 and m["solidity"] > 0.92 and m["extent"] > 0.55)
+
+def medidas_forma(mask):
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts: 
+        return dict(area=0, per=1, circ=0, solidity=0, ar=1)
+    c = max(cnts, key=cv2.contourArea)
+    area = cv2.contourArea(c)
+    per  = max(1.0, cv2.arcLength(c, True))
+    circ = 4.0*np.pi*area/(per*per)           # 1=círculo perfecto
+    hull = cv2.convexHull(c)
+    harea = max(1.0, cv2.contourArea(hull))
+    solidity = area/harea
+    x,y,w,h = cv2.boundingRect(c)
+    ar = min(w,h)/max(w,h)                    # 1 = cuadrado/círculo
+    return dict(area=area, per=per, circ=circ, solidity=solidity, ar=ar)
+
+def es_pieza_compacta(m):
+    # Criterio muy permisivo para tuerca/arandela (compactas y bastante redondas)
+    return (m["solidity"] > 0.93) and (m["circ"] > 0.60) and (m["ar"] > 0.65)
+
+def aplanar_fondo_anillo(gray, mask_obj, ring_out_px=10, k_sigma=1.0, frac=0.8):
+    """
+    Suaviza el halo del FONDO justo fuera del borde de la pieza.
+    Baja (o sube) los outliers hacia la mediana del anillo externo.
+    """
+    r = max(1, int(ring_out_px))
+    K  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*r+1, 2*r+1))
+    dil = cv2.dilate(mask_obj, K, iterations=1)
+    ring = cv2.subtract(dil, mask_obj)
+    if cv2.countNonZero(ring) == 0: 
+        return gray
+
+    vals = gray[ring>0].astype(np.float32)
+    med  = float(np.median(vals))
+    mu   = float(np.mean(vals))
+    sd   = float(np.std(vals)) + 1e-3
+    lo, hi = mu - k_sigma*sd, mu + k_sigma*sd
+
+    g = gray.astype(np.float32)
+    # clamp suave sólo dentro del anillo
+    over = (g > hi) & (ring>0)
+    under= (g < lo) & (ring>0)
+    g[over]  = g[over]  - frac*(g[over]-med)
+    g[under] = g[under] + frac*(med-g[under])
+    return np.clip(g,0,255).astype(np.uint8)
+
+def opening_by_reconstruction(mask, r=2):
+    """Opening por reconstrucción: elimina espuelas finas hacia afuera."""
+    K = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*r+1, 2*r+1))
+    seed = cv2.erode(mask, K, iterations=1)
+    rec  = seed.copy()
+    while True:
+        dil = cv2.dilate(rec, K, iterations=1)
+        new = cv2.min(dil, mask)
+        if np.array_equal(new, rec):
+            break
+        rec = new
+    return rec
+
+def limar_espuelas(mask, r=2):
+    return opening_by_reconstruction(mask, r=r)
+
+
+
