@@ -1,4 +1,4 @@
-# rango_parametros.py
+# grafico_rangos_todos.py
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,78 +7,69 @@ from pathlib import Path
 CSV_PATH = Path("base_datos/features_imagenes.csv")
 OUT_DIR  = Path("base_datos/plots_rangos")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
+OUT_IMG  = OUT_DIR / "rangos_todos.png"
 
-# Orden deseado de clases
-CLASSES = ["Arandela", "Tuerca", "Tornillo", "Clavo"]
-
-# 9 parámetros solicitados
-FEATURES = ["hu1","hu2","hu3","hu4","hu5","hu6",
-            "circularidad","redondez","aspect_ratio"]
+CLASSES  = ["Arandela", "Tuerca", "Tornillo", "Clavo"]
+FEATURES = ["hu1","hu2","hu3","hu4","hu5","hu6","circularidad","redondez","aspect_ratio"]
 
 if not CSV_PATH.exists():
     raise SystemExit(f"No se encontró el CSV: {CSV_PATH}")
 
-# Leer CSV
 df = pd.read_csv(CSV_PATH)
 
-# Asegurar columnas necesarias
-expected = {"file","clase", *FEATURES}
-missing = expected - set(df.columns)
-if missing:
-    raise SystemExit(f"Faltan columnas en el CSV: {missing}")
-
-# Convertir a numérico por si vinieron como texto
+# Asegurar tipos numéricos
 for c in FEATURES:
     df[c] = pd.to_numeric(df[c], errors="coerce")
-
-# Filtrar filas válidas (sin NaN en los features)
 df = df.dropna(subset=FEATURES)
 
-# Función para graficar rango por clase en un único parámetro
-def plot_range_for_feature(feat: str):
-    # Calcular min, mediana, max por clase (solo si hay datos de esa clase)
+# Resumen min/med/max por clase y parámetro
+summ = {}
+for feat in FEATURES:
     rows = []
     for cls in CLASSES:
         s = df.loc[df["clase"] == cls, feat]
-        if len(s) == 0:
+        if s.empty: 
             continue
-        rows.append({
-            "clase": cls,
-            "min":   float(s.min()),
-            "med":   float(s.median()),
-            "max":   float(s.max()),
-            "n":     int(s.count())
-        })
-    if not rows:
-        print(f"[AVISO] No hay datos para '{feat}'.")
-        return
+        rows.append({"clase": cls, "min": s.min(), "med": s.median(), "max": s.max(), "n": int(s.count())})
+    summ[feat] = pd.DataFrame(rows)
 
-    summary = pd.DataFrame(rows)
-    # Mantener el orden de CLASSES
-    summary["orden"] = summary["clase"].apply(lambda x: CLASSES.index(x))
-    summary = summary.sort_values("orden")
+# Figura única con una columna por parámetro
+n = len(FEATURES)
+fig, axes = plt.subplots(1, n, figsize=(2.2*n, 4), sharey=True)
 
-    y = np.arange(len(summary))
-    plt.figure(figsize=(8, 3.5))
+if n == 1:
+    axes = [axes]
 
-    # Línea min–max y punto en la mediana
-    for i, r in summary.iterrows():
-        plt.plot([r["min"], r["max"]], [y[list(summary.index).index(i)] ]*2, "-")
-        plt.plot(r["med"], y[list(summary.index).index(i)], "o")
+for ax, feat in zip(axes, FEATURES):
+    if feat not in summ or summ[feat].empty:
+        ax.set_xlabel(feat)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        continue
 
-    plt.yticks(y, summary["clase"])
-    plt.xlabel(feat)
-    plt.title(f"Rango por clase: {feat}")
-    plt.grid(True, axis="x", linestyle=":")
-    plt.tight_layout()
+    s = summ[feat].copy()
+    s["orden"] = s["clase"].apply(lambda x: CLASSES.index(x))
+    s = s.sort_values("orden")
+    y = np.arange(len(s))
 
-    out_path = OUT_DIR / f"rango_{feat}.png"
-    plt.savefig(out_path, dpi=150)
-    plt.show()
-    print(f"Guardado: {out_path}  (n por clase: {list(summary['n'])})")
+    # Dibujar rangos y medianas
+    for i, r in s.iterrows():
+        yi = y[list(s.index).index(i)]
+        ax.plot([r["min"], r["max"]], [yi, yi], "-")
+        ax.plot(r["med"], yi, "o")
 
-# Generar una figura por parámetro
-for feat in FEATURES:
-    plot_range_for_feature(feat)
+    ax.set_xlabel(feat)                    # ← etiqueta abajo
+    ax.grid(True, axis="x", linestyle=":")
+    if ax is axes[0]:
+        ax.set_yticks(y)
+        ax.set_yticklabels(s["clase"])
+    else:
+        ax.set_yticks(y)
+        ax.set_yticklabels([])
 
-print("\nListo. Figuras en:", OUT_DIR)
+# Dar más margen abajo para las etiquetas
+plt.tight_layout(rect=[0, 0.05, 1, 1])
+
+plt.savefig(OUT_IMG, dpi=150)
+plt.show()
+print(f"Gráfico guardado en: {OUT_IMG}")
