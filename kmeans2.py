@@ -113,7 +113,6 @@ def plot_2d_and_3d(df, labels, kmeans, scaler, mayoritaria):
         ax.set_title(title); ax.set_xlabel(xl); ax.set_ylabel(yl)
         return sc
 
-# Modificar los gráficos 2D para mostrar combinaciones con grad_mean
     scat(axes[0], df['hu1_log'], df['hu2_log'], 'hu1_log vs hu2_log', 'hu1_log', 'hu2_log')
     scat(axes[1], df['hu1_log'], df['ar2'], 'hu1_log vs ar2', 'hu1_log', 'ar2')
     scat(axes[2], df['hu2_log'], df['ar2'], 'hu2_log vs ar2', 'hu2_log', 'ar2')
@@ -258,16 +257,7 @@ def main():
     plot_2d_and_3d(df, labels, kmeans, scaler, mayoritaria)
 
     # guardar artefactos
-    #df.to_csv(CSV_OUT, index=False)
-
-    columnas_deseadas = ['file', 'clase', 'hu1_log', 'hu2_log', 'ar2', 'cluster']
-    # guardar artefactos
-    #df.to_csv(CSV_OUT, index=False)
-    df_salida = df[columnas_deseadas].copy()
-    # Redondear todas las columnas numéricas a 6 decimales
-    columnas_numericas = ['ar2', 'hu1_log', 'hu2_log']
-    df_salida[columnas_numericas] = df_salida[columnas_numericas].round(3)
-    df_salida.to_csv(CSV_OUT, index=False)
+    df.to_csv(CSV_OUT, index=False)
     joblib.dump(scaler, SCALER_OUT)
     joblib.dump(kmeans, MODEL_OUT)
     print(f"\n✓ Guardado DataFrame con clusters en: {CSV_OUT}")

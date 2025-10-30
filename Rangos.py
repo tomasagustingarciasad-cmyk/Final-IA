@@ -4,13 +4,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-CSV_PATH = Path("base_datos/features_imagenes.csv")
+CSV_PATH = Path("base_datos/cualidades_imagenes.csv")
 OUT_DIR  = Path("base_datos/plots_rangos")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 OUT_IMG  = OUT_DIR / "rangos_todos.png"
 
 CLASSES  = ["Arandela", "Tuerca", "Tornillo", "Clavo"]
-FEATURES = ["hu1","hu2","hu3","hu4","hu5","hu6","circularidad","redondez","aspect_ratio"]
+FEATURES = ["hu1","hu2","hu3","hu4","hu5","hu6",
+          "circularidad","redondez","aspect_ratio","n_lados",
+          "grad_mean","edge_density"]
 
 if not CSV_PATH.exists():
     raise SystemExit(f"No se encontró el CSV: {CSV_PATH}")

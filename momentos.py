@@ -11,6 +11,7 @@ IN_DIRS = {
     "Tornillo": BASE / "TORNILLOS",
     "Clavo":    BASE / "CLAVOS",
 }
+
 # Directorios con las imágenes ORIGINALES
 ORIG_DIRS = {
     "Arandela": BASE / "Arandela",
@@ -18,8 +19,7 @@ ORIG_DIRS = {
     "Tornillo": BASE / "Tornillo",
     "Clavo":    BASE / "Clavo",
 }
-
-OUT_CSV = BASE / "features_imagenes.csv"
+OUT_CSV = BASE / "cualidades_imagenes.csv"
 
 def list_images(indir: Path):
     pats = ["*.png","*.PNG","*.jpg","*.JPG","*.jpeg","*.JPEG"]
@@ -38,6 +38,7 @@ def find_original(label: str, stem: str):
     cands = list(odir.glob(stem + ".*"))
     return cands[0] if cands else None
 
+
 def ensure_binary(img: np.ndarray):
     if img.ndim == 3:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -55,6 +56,54 @@ def hu_log6_from_mask(mask_bin: np.ndarray):
     eps = 1e-30
     return (-np.sign(hu) * np.log10(np.abs(hu) + eps))[:6]
 
+# === NUEVO: contador de lados robusto sobre un contorno ===
+def contar_lados_contorno(c: np.ndarray, eps_rel: float = 0.02) -> int:
+    """
+    Devuelve cantidad de lados de la envolvente convexa del contorno 'c'.
+    0 => círculo/casi circular o indefinido.
+    Hace 'snap' a 6 si el polígono cae en 5–7 (tuercas).
+    """
+    hull = cv2.convexHull(c)
+    A = float(cv2.contourArea(hull))
+    P = float(cv2.arcLength(hull, True))
+    if P <= 1e-6 or A < 50:
+        return 0
+
+    circularidad = 4.0 * np.pi * A / (P * P)
+    if circularidad > 0.92:
+        return 0  # casi círculo → sin "lados" útiles
+
+    approx = cv2.approxPolyDP(hull, eps_rel * P, True)
+
+    # Fusionar vértices casi colineales para esquinas romas
+    pts = [p[0] for p in approx]
+    changed = True
+    while changed and len(pts) >= 4:
+        changed = False
+        i = 0
+        while i < len(pts):
+            a = pts[(i - 1) % len(pts)]
+            b = pts[i]
+            d = pts[(i + 1) % len(pts)]
+            v1 = (b - a).astype(np.float32)
+            v2 = (d - b).astype(np.float32)
+            n1 = np.linalg.norm(v1)
+            n2 = np.linalg.norm(v2)
+            if n1 == 0 or n2 == 0:
+                pts.pop(i); changed = True; continue
+            cosang = np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0)
+            ang = np.degrees(np.arccos(cosang))
+            if ang > 168.0:  # ~colineal
+                pts.pop(i); changed = True
+            else:
+                i += 1
+
+    n = len(pts)
+    if 5 <= n <= 7:
+        n = 6  # snap para tuercas
+    return int(n)
+
+
 def features_from_mask(mask_bin: np.ndarray):
     cnts, _ = cv2.findContours(mask_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts: return None
@@ -71,8 +120,15 @@ def features_from_mask(mask_bin: np.ndarray):
     x, y, w, h = cv2.boundingRect(c)
     ar = min(w, h) / max(w, h)
 
+    # === NUEVO: dimensiones totales de la imagen ===
+    h2, w2 = mask_bin.shape[:2]
+    ar2 = min(w2, h2) / max(w2, h2)
+
+     # === NUEVO: lados
+    n_lados = contar_lados_contorno(c, eps_rel=0.02)
+
     hu6 = hu_log6_from_mask(mask_bin)
-    return hu6.tolist(), circ, roundness, ar
+    return hu6.tolist(), circ, roundness, ar, ar2, n_lados
 
 def texture_feats_from_original(orig_gray: np.ndarray, mask_bin: np.ndarray):
     """Textura interna: energía de gradiente y densidad de bordes dentro de la máscara."""
@@ -114,25 +170,26 @@ for label, indir in IN_DIRS.items():
         if feats is None:
             print(f"  [SKIP] Sin contornos: {p.name}")
             continue
-        hu6, circ, roundness, ar = feats
+        hu6, circ, roundness, ar, ar2, n_lados = feats
 
         # textura desde la imagen original
         orig_path = find_original(label, p.stem)
         if orig_path is not None:
             orig = cv2.imread(str(orig_path), cv2.IMREAD_GRAYSCALE)
             grad_mean, edge_density = texture_feats_from_original(orig, mask)
+            edge_density = 0.0
         else:
             grad_mean, edge_density = (0.0, 0.0)
             print(f"  [WARN] No se encontró original para {p.name}")
 
         rows.append([p.name, label,
                      *[f"{v:.6f}" for v in hu6],
-                     f"{circ:.6f}", f"{roundness:.6f}", f"{ar:.6f}",
-                     f"{grad_mean:.6f}", f"{edge_density:.6f}"])
+                     f"{circ:.6f}", f"{roundness:.6f}", f"{ar:.6f}", f"{ar2:.6f}",
+                     str(n_lados), f"{grad_mean:.6f}", f"{edge_density:.6f}"])
 
 # Encabezado y guardado
 header = ["file","clase","hu1","hu2","hu3","hu4","hu5","hu6",
-          "circularidad","redondez","aspect_ratio",
+          "circularidad","redondez","aspect_ratio","ar2","n_lados",
           "grad_mean","edge_density"]
 
 OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
