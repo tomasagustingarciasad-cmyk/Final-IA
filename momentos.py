@@ -150,52 +150,55 @@ def texture_feats_from_original(orig_gray: np.ndarray, mask_bin: np.ndarray):
     edge_density = float(cv2.countNonZero(edges_in)) / area
     return grad_mean, edge_density
 
-# --- Recorrido y escritura CSV ---
-rows = []
-for label, indir in IN_DIRS.items():
-    paths = list_images(indir)
-    if not paths:
-        print(f"[AVISO] No hay imágenes en {indir}")
-        continue
-
-    print(f"Procesando clase '{label}' ({len(paths)} imágenes) ...")
-    for p in paths:
-        mask_img = cv2.imread(str(p), cv2.IMREAD_UNCHANGED)
-        if mask_img is None:
-            print(f"  [SKIP] No se pudo leer máscara: {p}")
+# --- Recorrido y escritura CSV ---   <-- BORRAR este encabezado viejo
+def main():
+    rows = []
+    for label, indir in IN_DIRS.items():
+        paths = list_images(indir)
+        if not paths:
+            print(f"[AVISO] No hay imágenes en {indir}")
             continue
-        mask = ensure_binary(mask_img)
 
-        feats = features_from_mask(mask)
-        if feats is None:
-            print(f"  [SKIP] Sin contornos: {p.name}")
-            continue
-        hu6, circ, roundness, ar, ar2, n_lados = feats
+        print(f"Procesando clase '{label}' ({len(paths)} imágenes) ...")
+        for p in paths:
+            mask_img = cv2.imread(str(p), cv2.IMREAD_UNCHANGED)
+            if mask_img is None:
+                print(f"  [SKIP] No se pudo leer máscara: {p}")
+                continue
+            mask = ensure_binary(mask_img)
 
-        # textura desde la imagen original
-        orig_path = find_original(label, p.stem)
-        if orig_path is not None:
-            orig = cv2.imread(str(orig_path), cv2.IMREAD_GRAYSCALE)
-            grad_mean, edge_density = texture_feats_from_original(orig, mask)
-            edge_density = 0.0
-        else:
-            grad_mean, edge_density = (0.0, 0.0)
-            print(f"  [WARN] No se encontró original para {p.name}")
+            feats = features_from_mask(mask)
+            if feats is None:
+                print(f"  [SKIP] Sin contornos: {p.name}")
+                continue
+            hu6, circ, roundness, ar, ar2, n_lados = feats
 
-        rows.append([p.name, label,
-                     *[f"{v:.6f}" for v in hu6],
-                     f"{circ:.6f}", f"{roundness:.6f}", f"{ar:.6f}", f"{ar2:.6f}",
-                     str(n_lados), f"{grad_mean:.6f}", f"{edge_density:.6f}"])
+            # textura desde la imagen original
+            orig_path = find_original(label, p.stem)
+            if orig_path is not None:
+                orig = cv2.imread(str(orig_path), cv2.IMREAD_GRAYSCALE)
+                grad_mean, edge_density = texture_feats_from_original(orig, mask)
+                edge_density = 0.0
+            else:
+                grad_mean, edge_density = (0.0, 0.0)
+                print(f"  [WARN] No se encontró original para {p.name}")
 
-# Encabezado y guardado
-header = ["file","clase","hu1","hu2","hu3","hu4","hu5","hu6",
-          "circularidad","redondez","aspect_ratio","ar2","n_lados",
-          "grad_mean","edge_density"]
+            rows.append([p.name, label,
+                        *[f"{v:.6f}" for v in hu6],
+                        f"{circ:.6f}", f"{roundness:.6f}", f"{ar:.6f}", f"{ar2:.6f}",
+                        str(n_lados), f"{grad_mean:.6f}", f"{edge_density:.6f}"])
 
-OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
-    writer = csv.writer(f)
-    writer.writerow(header)
-    writer.writerows(rows)
+    header = ["file","clase","hu1","hu2","hu3","hu4","hu5","hu6",
+              "circularidad","redondez","aspect_ratio","ar2","n_lados",
+              "grad_mean","edge_density"]
 
-print(f"\nListo. CSV guardado en: {OUT_CSV} ({len(rows)} filas)")
+    OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
+    with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(rows)
+
+    print(f"\nListo. CSV guardado en: {OUT_CSV} ({len(rows)} filas)")
+
+if __name__ == "__main__":
+    main()

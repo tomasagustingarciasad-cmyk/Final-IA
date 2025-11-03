@@ -4,6 +4,7 @@ import numpy as np
 import re
 from pathlib import Path
 from collections import Counter, defaultdict
+import joblib
 
 # ===============================
 # Config
@@ -198,9 +199,10 @@ class KNNPuro:
         return np.array(preds)
 
 # ===============================
-# Main
+# Main - ENTRENAR Y GUARDAR
 # ===============================
 def main():
+    print("🚀 Iniciando entrenamiento de K-NN para audio...\n")
     # === 1) Cargar ===
     if not CSV_PATH.exists():
         raise FileNotFoundError(f"No se encontró el CSV en: {CSV_PATH.resolve()}")
@@ -217,6 +219,7 @@ def main():
         feat_cols = [c for c in df_raw.columns if c not in aux and pd.api.types.is_numeric_dtype(df_raw[c])]
         print("⚠ No se hallaron columnas que cumplan el patrón "
               f"{FEATURE_REGEX}. Uso fallback: {len(feat_cols)} columnas numéricas.")
+    print(f"✔ Features seleccionados: {len(feat_cols)} columnas")
 
     # === 3) Dedupe por path/id (si existen) antes de limpiar ===
     df = df_raw.copy()
@@ -235,6 +238,15 @@ def main():
     # Descarta auxiliares que no son features del modelo
     df = df.drop(columns=[c for c in ["id", "path_rel"] if c in df.columns], errors="ignore")
 
+    
+    
+    
+    
+    
+    
+    
+    
+    
     # === 4) X, y + limpieza de NaN/Inf ===
     X_df = df[feat_cols].apply(pd.to_numeric, errors="coerce")
     y_ser = df[TARGET].astype("category")
@@ -288,9 +300,9 @@ def main():
     y_tr, y_te = y_all[train_idx], y_all[test_idx]
 
     # === 7) Estandarización (fit en train, aplicar en train y test)
-    scaler = Standardizer().fit(X_tr)
-    X_tr = scaler.transform(X_tr)
-    X_te = scaler.transform(X_te)
+    scaler_eval = Standardizer().fit(X_tr)
+    X_tr = scaler_eval.transform(X_tr)
+    X_te = scaler_eval.transform(X_te)
 
     # === 8) KNN puro
     knn = KNNPuro(n_neighbors=K_NEIGHBORS, p=MINKOWSKI_P, weighted=WEIGHTED)
@@ -337,10 +349,34 @@ def main():
     print("\nMatriz de confusión:")
     print(cm_df)
 
-    # (Opcional) Guardar “modelo” (en KNN es básicamente los datos y parámetros)
-    # np.savez("knn_audio_model_puro.npz",
-    #          X_train=X_tr, y_train=y_tr, mean=scaler.mean_, std=scaler.std_,
-    #          kept_cols=np.array(kept_cols), k=K_NEIGHBORS, p=MINKOWSKI_P, weighted=WEIGHTED)
+    # 7) Entrenar CON TODO EL DATASET (sin split)
+    print("\n" + "="*50)
+    print("🔧 ENTRENAMIENTO FINAL (usando TODO el dataset)")
+    print("   (El modelo anterior con split era solo para evaluar)")
+    print("="*50 + "\n")
+    scaler_final = Standardizer().fit(X_all)
+    X_scaled = scaler_final.transform(X_all)
+
+    knn = KNNPuro(n_neighbors=K_NEIGHBORS, p=MINKOWSKI_P, weighted=WEIGHTED)
+    knn.fit(X_scaled, y_all)
+
+    # 8) Guardar modelo completo
+    Path("models").mkdir(exist_ok=True)
+    np.savez(
+        "models/knn_audio_puro.npz",
+        X_train=knn.X_train,
+        y_train=knn.y_train,
+        mean=scaler_final.mean_,
+        std=scaler_final.std_,
+        kept_cols=np.array(kept_cols, dtype=object),
+        k=K_NEIGHBORS,
+        p=MINKOWSKI_P,
+        weighted=WEIGHTED
+    )
+    print("\n✅ Modelo K-NN guardado en: models/knn_audio_puro.npz")
+    print(f"   - X_train shape: {knn.X_train.shape}")
+    print(f"   - Clases: {np.unique(y_all)}")
+    print(f"   - K vecinos: {K_NEIGHBORS}")
 
 if __name__ == "__main__":
     main()

@@ -21,6 +21,7 @@ MODEL_OUT = "Mi_kmeans_mbkmeans.joblib"            # guardamos el objeto KMeans 
 RANDOM_STATE = 42
 MAX_SILH_SAMPLES = 5000
 CLASS_ORDER = ['Arandela', 'Tuerca', 'Tornillo', 'Clavo']
+RUNTIME_COLS = ['hu1', 'hu2', 'ar2']  # nombres que la app espera
 
 # =========================
 # Utils generales
@@ -62,9 +63,6 @@ def resolve_csv_path(cli_csv: str | None):
         return hits[0].resolve()
     raise FileNotFoundError(f"No se encontró {CSV_DEFAULT_NAME} cerca de {here}")
 
-def _euclid_sq(a: np.ndarray, b: np.ndarray) -> float:
-    v = a - b
-    return float(np.dot(v, v))
 
 def build_class_prototypes(
     df: pd.DataFrame,
@@ -164,11 +162,20 @@ def assign_clusters_one_to_one(df: pd.DataFrame) -> dict[int, str]:
 
 
 def plot_2d_and_3d(df, labels, kmeans, mayoritaria):
-    cmap = plt.get_cmap('tab10')
+    COLOR_MAP = {
+        'Arandela': '#1f77b4',  # azul
+        'Tuerca': '#ff7f0e',    # naranja
+        'Tornillo': '#2ca02c',  # verde
+        'Clavo': '#d62728'      # rojo
+    }
+    
+    # Mapear cada punto a su color según la clase asignada
+    colores = [COLOR_MAP.get(mayoritaria.get(lab, ''), '#7f7f7f') for lab in labels]
+    
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
 
     def scat(ax, x, y, title, xl, yl):
-        sc = ax.scatter(x, y, c=labels, cmap=cmap, alpha=0.8, s=20)
+        sc = ax.scatter(x, y, c=colores, alpha=0.8, s=20)
         ax.set_title(title); ax.set_xlabel(xl); ax.set_ylabel(yl)
         return sc
 
@@ -184,7 +191,8 @@ def plot_2d_and_3d(df, labels, kmeans, mayoritaria):
     orden_clusters = sorted(np.unique(labels).tolist())
     handles = [
         Line2D([], [], marker='o', linestyle='None', markersize=8,
-               color=cmap(c), label=mayoritaria.get(c, f"Cluster {c}"))
+               color=COLOR_MAP.get(mayoritaria.get(c, ''), '#7f7f7f'), 
+               label=mayoritaria.get(c, f"Cluster {c}"))
         for c in orden_clusters
     ]
     for ax in axes:
@@ -197,13 +205,14 @@ def plot_2d_and_3d(df, labels, kmeans, mayoritaria):
     plt.tight_layout()
 
     # 3D
-    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+    from mpl_toolkits.mplot3d import Axes3D
     fig3 = plt.figure(figsize=(7.5, 6.5))
     ax3 = fig3.add_subplot(111, projection='3d')
-    ax3.scatter(df['hu1_log'], df['hu2_log'], df['ar2'], c=labels, cmap=cmap, alpha=0.85, s=20)
+    ax3.scatter(df['hu1_log'], df['hu2_log'], df['ar2'], c=colores, alpha=0.85, s=20)
     ax3.set_xlabel('hu1_log'); ax3.set_ylabel('hu2_log'); ax3.set_zlabel('ar2')
     ax3.set_title('Espacio 3D: hu1_log, hu2_log, ar2')
-    ax3.scatter(cent_orig[:, 0], cent_orig[:, 1], cent_orig[:, 2], marker='X', s=160, edgecolors='k')
+    ax3.scatter(cent_orig[:, 0], cent_orig[:, 1], cent_orig[:, 2], marker='X', s=160, edgecolors='k', c='black')
+    
     leg3 = ax3.legend(handles=handles, title="Elemento", loc='upper right', frameon=True)
     try:
         leg3._legend_box.align = "left"  # type: ignore
@@ -211,6 +220,44 @@ def plot_2d_and_3d(df, labels, kmeans, mayoritaria):
         pass
 
     plt.show()
+
+    # === Export runtime (.npz) para la app ===
+    # NOTA: en runtime la app usa claves 'hu1','hu2','ar2'.
+    # Aquí entrenamos con ('hu1_log','hu2_log','ar2'), pero semánticamente
+    # 'hu1' en runtime = 'hu1_log' aquí (porque la app también hace log-transform).
+    
+    
+
+    # medias/desvíos en el espacio de entrenamiento: (hu1_log, hu2_log, ar2)
+    X_for_stats = df[['hu1_log','hu2_log','ar2']].to_numpy(dtype=float)
+    mean = X_for_stats.mean(axis=0)
+    std  = X_for_stats.std(axis=0, ddof=0)
+    std[std == 0.0] = 1.0
+
+    # centroides del modelo en el mismo espacio (hu1_log,hu2_log,ar2)
+    cent_orig = kmeans.cluster_centers_          # (K,3)
+    cent_z    = (cent_orig - mean) / std         # exportamos en z-score
+
+    # orden de etiquetas para runtime
+    K = cent_z.shape[0]
+    try:
+        # si mapeaste por índice (seeds), respeta 'used_classes'
+        label_order = [mayoritaria[i] for i in range(K)]
+    except Exception:
+        from itertools import islice
+        label_order = list(islice(CLASS_ORDER, K))
+
+    out_dir = Path("models"); out_dir.mkdir(exist_ok=True)
+    np.savez(out_dir / "kmeans_puro.npz",
+             centroids=cent_z,       # (K,3) en z-score
+             mean=mean,              # (3,)
+             std=std,                # (3,)
+             kept_cols=np.array(RUNTIME_COLS, dtype=object),  # nombres que usará la app
+             label_order=np.array(label_order, dtype=object))
+
+    print("\n✓ Export runtime -> models/kmeans_puro.npz")
+    print("  kept_cols   :", RUNTIME_COLS)
+    print("  label_order :", label_order)
 
 # =========================
 # KMeans puro (sin sklearn)
