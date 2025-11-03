@@ -188,8 +188,11 @@ def main():
     X = df[['hu1_log','hu2_log','ar2']].values
 
     # escalar
-    scaler = StandardScaler()
+    # escalar a rango [0, 1]
+    from sklearn.preprocessing import MinMaxScaler
+    scaler = MinMaxScaler()
     Xs = scaler.fit_transform(X)
+
 
     # elegir K
     use_auto = str(args.auto_k).strip().lower() in {"1","true","yes","y","t"}
@@ -227,7 +230,8 @@ def main():
             .values
         )
         # Escalar esos centroides
-        class_means_scaled = StandardScaler().fit(X).transform(class_means)
+        class_means_scaled = scaler.transform(class_means)
+
 
         # Forzar K=4 y usar esos centroides como inicio
         K = 4

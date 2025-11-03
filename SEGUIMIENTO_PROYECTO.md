@@ -5,15 +5,15 @@
 
 ## 📊 RESUMEN EJECUTIVO
 
-**Fecha de análisis:** 30 de octubre de 2025  
-**Estado general:** 🟡 En progreso avanzado (≈55% completado)
+**Fecha de análisis:** 2 de noviembre de 2025  
+**Estado general:** 🟡 En progreso avanzado (≈62% completado)
 
 ### Progreso por componentes:
-- ✅ **Visión Artificial (K-Means):** 75% completado
-- 🔴 **Reconocimiento de Voz (K-NN):** 0% completado  
+- ✅ **Visión Artificial (K-Means):** 85% completado
+- � **Reconocimiento de Voz (K-NN):** 55% completado  
 - 🔴 **Clasificador Bayesiano:** 0% completado
-- 🟡 **Integración del sistema:** 10% completado
-- 🔴 **Documentación y entregables:** 20% completado
+- 🟡 **Integración del sistema:** 12% completado
+- 🔴 **Documentación y entregables:** 25% completado
 
 ---
 
@@ -42,12 +42,13 @@
 - [x] Rellenado de huecos
 - [x] Generación de máscaras binarias
 - [x] Procesamiento de 4 clases de piezas
-- [x] Imágenes originales capturadas:
-  - Arandelas: 11 imágenes
-  - Tuercas: 9 imágenes
-  - Tornillos: 6 imágenes
-  - Clavos: 14 imágenes
-  - **TOTAL: 40 imágenes**
+- [x] Imágenes originales capturadas (carpeta `base_datos/`):
+  - Arandelas: 11 imágenes (ver `base_datos/Arandela/`)
+  - Tuercas: pendiente de conteo (ver `base_datos/Tuerca/`)
+  - Tornillos: 14 imágenes (ver `base_datos/Tornillo/`)
+  - Clavos: 14 imágenes (ver `base_datos/Clavo/`)
+  - Procesadas/derivadas: `base_datos/ARANDELAS/`, `base_datos/CLAVOS/`, `base_datos/TORNILLOS/`, `base_datos/TUERCAS/`
+  - **TOTAL conocido:** ≥39 (falta confirmar Tuercas)
 
 #### 🟡 Tareas pendientes:
 - [ ] **CRÍTICO:** Ampliar dataset a mínimo 20-30 imágenes por clase
@@ -82,7 +83,8 @@
 - [x] Características de textura:
   - [x] Energía de gradiente
   - [x] Densidad de bordes
-- [x] Generación de CSV con features (`features_imagenes.csv`)
+- [x] Generación de CSV con features (ver `base_datos/cualidades_imagenes.csv`)
+- [x] Exportación posterior con clustering (`features_clusterizados.csv`)
 - [x] Transformación logarítmica de momentos de Hu
 - [x] Búsqueda automática de imágenes originales
 
@@ -106,7 +108,7 @@
 
 ## ✅ MÓDULO 3: CLUSTERING K-MEANS
 
-### Estado: ✅ MAYORMENTE COMPLETADO (75%)
+### Estado: ✅ MAYORMENTE COMPLETADO (85%)
 
 #### ✅ Tareas completadas:
 - [x] Implementación de K-Means (`Kmeans.py`)
@@ -116,16 +118,21 @@
 - [x] Asignación automática cluster → clase
 - [x] Visualización 2D (3 vistas)
 - [x] Visualización 3D (hu1, hu2, redondez)
-- [x] Exportación de resultados (`features_clusterizados.csv`)
 - [x] Script de análisis de rangos (`Rangos.py`)
-- [x] Gráficos adicionales (`3D.py`)
+- [x] Exportación de resultados (`features_clusterizados.csv`)
+- [x] Artefactos guardados: `scaler_kmeans.joblib`, `kmeans_mbkmeans.joblib`
+- [x] Implementaciones/variantes en repo: `Kmeans.py`, `kmeans2.py`
+- [ ] Gráficos adicionales (script dedicado 3D por crear si hace falta)
 
-#### 🟡 Tareas pendientes:
-- [ ] **IMPLEMENTAR K-MEANS DESDE CERO** (requisito del TP)
-  - [ ] Crear `kmeans_custom.py` sin usar sklearn.cluster.KMeans
-  - [ ] Implementar algoritmo de Lloyd
-  - [ ] Calcular distancias euclidianas manualmente
-  - [ ] Implementar convergencia y stopping criteria
+#### ✅ Avances nuevos (02/11):
+- [x] K-Means propio sin sklearn (minibatch) en `Mi_Kmeans.py` con escalado interno min-max
+- [x] Forzado K=4 cuando hay columna `clase` (paridad con script base)
+- [x] Relleno de centroides faltantes vía k-means++ hasta completar K=4
+- [x] Guardado de “scaler” compatible (objeto con `transform/inverse_transform`)
+- [x] CSV de salida con encabezado estable: `file, clase, hu1_log, hu2_log, ar2, cluster`
+- [x] Asignación 1-a-1 cluster→clase (Hungarian si hay SciPy; si no, greedy)
+
+- #### 🟡 Tareas pendientes:
 - [ ] Validar clustering con métricas:
   - [ ] Silhouette score
   - [ ] Davies-Bouldin index
@@ -145,46 +152,42 @@ SEGÚN TUS NOTAS: "Kmeans y Knn desarrollados por nosotros"
 
 ---
 
-## 🔴 MÓDULO 4: CLASIFICADOR K-NN (RECONOCIMIENTO DE VOZ)
+## � MÓDULO 4: CLASIFICADOR K-NN (RECONOCIMIENTO DE VOZ)
 
-### Estado: 🔴 NO INICIADO (0%)
+### Estado: � EN PROGRESO (≈55%)
 
-#### 🔴 Tareas por hacer:
-- [ ] **Captura de audios de comandos:**
-  - [ ] Definir comandos (ej: "arandela", "tuerca", "tornillo", "clavo", "contar", "clasificar")
-  - [ ] Grabar 20-30 muestras por comando
-  - [ ] Grabar con diferentes personas si es posible
-  - [ ] Guardar en formato WAV o MP3
-  
-- [ ] **Preprocesamiento de audio:**
-  - [ ] Instalar librería `librosa` (mencionada en tus notas)
-  - [ ] Normalizar longitud de audios
-  - [ ] Eliminar silencios
-  - [ ] Aplicar filtros de ruido
-  
-- [ ] **Extracción de características de audio:**
-  - [ ] MFCC (Mel-frequency cepstral coefficients)
-  - [ ] Espectrograma
-  - [ ] Zero-crossing rate
-  - [ ] Energía espectral
-  
-- [ ] **Implementación K-NN desde cero:**
-  - [ ] Crear `knn_custom.py`
-  - [ ] Calcular distancias euclidianas
-  - [ ] Implementar votación de vecinos
-  - [ ] Probar con diferentes valores de K
-  
-- [ ] **Validación:**
-  - [ ] Split train/test
-  - [ ] Matriz de confusión
-  - [ ] Accuracy, precision, recall
+#### ✅ Avances completados:
+- [x] Pipeline de normalización de audio (`procesar_audio.py`):
+  - Re-muestreo a 16 kHz, paso a mono, filtro pasa banda, notch 50 Hz opcional
+  - Recorte de silencios (RMS deslizante), normalización a nivel RMS objetivo
+  - Duración fija (padding/recorte central) y exportación a `base_datos/Audio_norm/`
+- [x] Extracción de características por segmentos (`cualidades_audio.py`):
+  - 10 segmentos por audio; por segmento: ZCR, RMS y MFCC 1,2,4,5 (mean, max, std) → 14×10=140 features
+  - Artefactos generados: `base_datos/features_audio.csv`, `base_datos/X_audio.npy`, `base_datos/y_audio.npy`, `base_datos/labels_audio.json`
+- [x] Clasificación base con K-NN (sklearn) (`knn_audio.py`):
+  - Pipeline StandardScaler + KNN(k=5, weights="distance") con split 80/20 estratificado cuando es posible
+  - Reporte en consola y exportación de errores a `errores_test.csv` (último run: 1 error listado)
 
-#### 📦 Librerías necesarias:
+#### 🟡 Próximos pasos (voz):
+- [ ] Ampliar dataset de audio (≥ 30-40 muestras por clase, varias voces)
+- [ ] Validación adecuada: k-fold, matriz de confusión estable y métricas macro por clase
+- [ ] Selección de features/regularización: ajustar N_SEG, umbrales de silencios y MFCC
+- [ ] Implementar versión PROPIA de K-NN (`knn_custom.py`) sin sklearn
+  - [ ] Distancia euclidiana y normalización idéntica a la del pipeline base
+  - [ ] Votación por vecinos con pesos 1/d² (equivalente a weights="distance")
+  - [ ] Comparativa contra sklearn (misma partición)
+
+#### 📌 Observaciones del último experimento:
+- Existe `errores_test.csv` con misclasificaciones detectadas (ej.: Cont_Rob.wav → predicho "Salir").
+- Conjunto actual es pequeño; resultados pueden variar entre splits.
+
+#### 📦 Librerías de audio utilizadas/pendientes:
 ```python
-# Instalar:
-pip install librosa
-pip install sounddevice  # Para grabar audio
-pip install soundfile    # Para guardar audio
+# Ya en uso en el repo:
+librosa, soundfile, numpy, scipy, scikit-learn, pandas
+
+# Opcional si se grabará desde Python:
+sounddevice
 ```
 
 ---
@@ -318,19 +321,21 @@ pip install soundfile    # Para guardar audio
 
 #### ✅ Librerías ya utilizadas:
 ```python
-- opencv-cv (cv2)
+- opencv-python (cv2)
 - numpy
 - pandas
 - matplotlib
 - scikit-learn (StandardScaler, KMeans)
 - pathlib
+- joblib
+- librosa
+- soundfile
+- scipy
 ```
 
 #### 🔴 Librerías necesarias por instalar:
 ```python
-- librosa          # Para procesamiento de audio
-- sounddevice      # Para captura de audio
-- soundfile        # Para guardar audio
+- sounddevice      # Para captura de audio (opcional)
 - fastapi          # Si hacen API REST (opcional)
 - uvicorn          # Para correr FastAPI
 - joblib           # Para guardar modelos (puede que ya esté)
@@ -353,10 +358,10 @@ pip install soundfile    # Para guardar audio
    - Variar ángulos, iluminación, posición
    - Objetivo: 20-25 imágenes por clase
 
-2. **[ ] IMPLEMENTAR K-MEANS DESDE CERO**
-   - Crear `kmeans_custom.py`
-   - No usar sklearn.cluster.KMeans
-   - Documentar el algoritmo paso a paso
+2. **[ ] VALIDAR K-MEANS EQUIVALENTE**
+  - Reportar métricas (silhouette, Davies-Bouldin, matriz de confusión)
+  - Comparar resultados entre `Kmeans.py` (sklearn) y `Mi_Kmeans.py` (propio)
+  - Dejar justificación y conclusiones
 
 3. **[ ] IMPLEMENTAR K-NN DESDE CERO**
    - Crear `knn_custom.py`
@@ -365,10 +370,10 @@ pip install soundfile    # Para guardar audio
 
 ### 🟡 IMPORTANTE - Siguiente semana:
 
-4. **[ ] CAPTURAR Y PROCESAR AUDIOS**
-   - Definir lista de comandos
-   - Grabar 20 muestras por comando
-   - Extraer características con librosa
+4. **[ ] AMPLIAR Y CURAR DATASET DE AUDIOS**
+  - Definir lista final de comandos
+  - Grabar ≥ 30-40 muestras por comando y por 2-3 personas
+  - Reprocesar con `procesar_audio.py` y re-extraer con `cualidades_audio.py`
 
 5. **[ ] IMPLEMENTAR CLASIFICADOR BAYESIANO**
    - Definir claramente el problema a resolver
@@ -395,7 +400,7 @@ pip install soundfile    # Para guardar audio
 ## 📊 CHECKLIST DE ENTREGABLES FINALES
 
 ### 📄 Código:
-- [ ] `kmeans_custom.py` - Implementación propia de K-Means
+- [x] `Mi_Kmeans.py` - Implementación propia de K-Means (minibatch + escalado interno)
 - [ ] `knn_custom.py` - Implementación propia de K-NN
 - [ ] `clasificador_bayesiano.py` - Clasificador Bayesiano
 - [ ] `sistema_integrado.py` - Sistema completo
@@ -509,7 +514,7 @@ pip install soundfile    # Para guardar audio
 
 ---
 
-**Última actualización:** 30 de octubre de 2025  
+**Última actualización:** 2 de noviembre de 2025  
 **Próxima revisión:** Diaria hasta la entrega
 
 ---

@@ -22,9 +22,10 @@ pairs = [
 ]
 
 def list_images(indir: Path):
-# Buscamos archivos .jpg/.jpeg/.png sin importar mayúsculas y descartamos duplicados de nombre.
-    files = list(indir.glob("*.[jJpP][pPnN][gG]"))  # busca .jpg, .jpeg, .png (todas combinaciones)
-    # elimina duplicados por nombre
+    pats = ["*.png", "*.PNG", "*.jpg", "*.JPG", "*.jpeg", "*.JPEG"]
+    files = []
+    for p in pats:
+        files.extend(indir.glob(p))
     unique = {f.stem.lower(): f for f in files}.values()
     return sorted(unique)
 
