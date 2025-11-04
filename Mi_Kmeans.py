@@ -15,9 +15,9 @@ import joblib
 # Config por defecto
 # =========================
 CSV_DEFAULT_NAME = "cualidades_imagenes.csv"
-CSV_OUT = "Mi_features_clusterizados.csv"
-SCALER_OUT = "Mi_scaler_kmeans.joblib"             # guardamos metadatos del escalado interno
-MODEL_OUT = "Mi_kmeans_mbkmeans.joblib"            # guardamos el objeto KMeans puro
+CSV_OUT = "Mi_features_clusterizados2.csv"
+SCALER_OUT = "Mi_scaler_kmeans2.joblib"             # guardamos metadatos del escalado interno
+MODEL_OUT = "Mi_kmeans_mbkmeans2.joblib"            # guardamos el objeto KMeans puro
 RANDOM_STATE = 42
 MAX_SILH_SAMPLES = 5000
 CLASS_ORDER = ['Arandela', 'Tuerca', 'Tornillo', 'Clavo']
@@ -248,14 +248,14 @@ def plot_2d_and_3d(df, labels, kmeans, mayoritaria):
         label_order = list(islice(CLASS_ORDER, K))
 
     out_dir = Path("models"); out_dir.mkdir(exist_ok=True)
-    np.savez(out_dir / "kmeans_puro.npz",
+    np.savez(out_dir / "kmeans_puro2.npz",                                        #Aca cambie para que guarde en models
              centroids=cent_z,       # (K,3) en z-score
              mean=mean,              # (3,)
              std=std,                # (3,)
              kept_cols=np.array(RUNTIME_COLS, dtype=object),  # nombres que usará la app
              label_order=np.array(label_order, dtype=object))
 
-    print("\n✓ Export runtime -> models/kmeans_puro.npz")
+    print("\n✓ Export runtime -> models/kmeans_puro2.npz")
     print("  kept_cols   :", RUNTIME_COLS)
     print("  label_order :", label_order)
 

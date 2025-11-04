@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 from collections import deque, Counter
 import numpy as np
 from threading import Timer
+import shutil
 # --- Importamos la lógica de nuestros scripts de predicción ---
 # (Asegúrate de que los archivos .py estén en la misma carpeta)
 try:
@@ -23,7 +24,7 @@ try:
     )
 except ImportError as e:
     print(f"❌ Error al importar los módulos de predicción: {e}")
-    print("Asegúrate de que 'predecir_imagenes.py' y 'predecir_audio.py' estén en la misma carpeta que 'app.py'")
+    print("Asegurate de que 'predecir_imagenes.py' y 'predecir_audio.py' estén en la misma carpeta que 'app.py'")
     exit()
 
 # ===============================
@@ -33,11 +34,17 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 Path(app.config['UPLOAD_FOLDER']).mkdir(exist_ok=True)
 
+# --- NUEVO: Definimos las carpetas de destino permanentes ---
+DIR_UPLOADS_ORIGINAL = Path("base_datos/subida")
+
+# --- NUEVO: Aseguramos que las carpetas existan al iniciar ---
+DIR_UPLOADS_ORIGINAL.mkdir(exist_ok=True)
+
 # --- Cargar modelos al iniciar la app ---
 print("🧠 Cargando modelos al iniciar...")
 try:
     # ✅ CORREGIDO: Especificamos las rutas a los modelos
-    ruta_modelo_imagen = Path("models/kmeans_puro.npz")
+    ruta_modelo_imagen = Path("models/kmeans_puro2.npz")
     ruta_modelo_audio = Path("models/knn_audio_puro.npz")
 
     # Ahora pasamos las rutas a las funciones de carga
@@ -78,8 +85,13 @@ def handle_predict_image():
     try:
         # Guardar el archivo temporalmente
         filename = secure_filename(file.filename)
+
+
+        
         filepath = Path(app.config['UPLOAD_FOLDER']) / filename
         file.save(filepath)
+        original_save_path = DIR_UPLOADS_ORIGINAL / filename
+        shutil.copy(filepath, original_save_path)
 
         # Predecir usando la lógica importada
         mask = procesar_imagen_completa(filepath)
