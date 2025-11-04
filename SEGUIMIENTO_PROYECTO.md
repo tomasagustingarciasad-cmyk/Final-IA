@@ -67,7 +67,54 @@
      * Fondos
 ```
 
----
+---## 2. Arquitectura del Sistema
+
+El proyecto se estructura en un modelo Cliente-Servidor, compuesto por tres capas principales:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  CLIENTE (Frontend - Celular)                           │
+│  ├─ Interfaz web (HTML, CSS, JavaScript)                 │
+│  ├─ Botón para capturar foto (usa la cámara del móvil)   │
+│  └─ Botón para grabar audio (usa el micrófono del móvil) │
+└──────────────────┬──────────────────────────────────────┘
+                   │ (Peticiones HTTP a través de la red local)
+                   ↓
+┌─────────────────────────────────────────────────────────┐
+│  SERVIDOR (Backend - Python / Flask)                    │
+│  ├─ Recibe archivos (imágenes, audio).                   │
+│  ├─ Orquesta el procesamiento y la predicción.           │
+│  ├─ Ejecuta los modelos de K-Means y K-NN.               │
+│  └─ Gestiona el estado de la aplicación (historial).    │
+└──────────────────┬──────────────────────────────────────┘
+
+
+
+
+
+
+┌─────────────────────────────────────────────────────────┐
+│  CELULAR (Frontend - HTML/JavaScript)                   │
+│  ├─ Botón: "Capturar Foto" → Saca foto y la envía      │
+│  ├─ Botón: "Grabar Comando" → Graba voz y la envía     │
+│  └─ Muestra: Resultados y conteo actual                 │
+└──────────────────┬──────────────────────────────────────┘
+                   │ (HTTP Request)
+                   ↓
+┌─────────────────────────────────────────────────────────┐
+│  COMPUTADORA (Backend - Python Flask/FastAPI)           │
+│  ├─ Recibe foto → Clasifica con K-Means → Guarda       │
+│  ├─ Recibe audio → Clasifica con K-NN → Ejecuta acción │
+│  └─ Mantiene: CSV con conteo de piezas (10 últimas)    │
+└──────────────────┬──────────────────────────────────────┘
+                   │
+                   ↓
+┌─────────────────────────────────────────────────────────┐
+│  MODELOS ENTRENADOS (archivos .joblib / .npz)          │
+│  ├─ models/kmeans_puro.npz  (K-Means entrenado)        │
+│  ├─ models/knn_audio_puro.npz (K-NN entrenado)         │
+│  └─ resultados_sesion.csv (10 últimas clasificaciones) │
+└─────────────────────────────────────────────────────────┘
 
 ## ✅ MÓDULO 2: EXTRACCIÓN DE CARACTERÍSTICAS
 

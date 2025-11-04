@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from collections import Counter, defaultdict
 import joblib
+import matplotlib.pyplot as plt  # <-- AÑADIR
+from mpl_toolkits.mplot3d import Axes3D  # <-- AÑADIR
 
 # ===============================
 # Config
@@ -198,6 +200,93 @@ class KNNPuro:
             preds.append(self._vote(idx, dist))
         return np.array(preds)
 
+
+# ===============================
+# Plotting
+# ===============================
+# def plot_3d_scatter(X_scaled, y_all, feature_names, title="Scatter 3D (audio)"):
+#     """
+#     Crea un gráfico de dispersión 3D.
+#     Calcula 3 features agregados únicamente para la visualización.
+#     """
+#     print("\n📊 Generando gráfico 3D de distribución de clases...")
+
+#     def get_indices_for_feature(base_name):
+#         """Encuentra los índices de las columnas para un tipo de feature en todos los segmentos."""
+#         indices = [i for i, name in enumerate(feature_names) if base_name in name and name.startswith('s')]
+#         print(f"   Buscando '{base_name}': encontrados {len(indices)} índices")
+#         if len(indices) > 0:
+#             print(f"      Ejemplo: {feature_names[indices[0]]}")
+#         return indices
+
+#     # # ✅ CORREGIR ESTOS NOMBRES:
+#     # zcr_indices = get_indices_for_feature('zcr_mean')      # Ya funciona
+#     # rolloff_indices = get_indices_for_feature('rms_mean')  # ✅ CAMBIAR a rms_mean
+#     # mfcc4_indices = get_indices_for_feature('mfcc4_mean')  # ✅ SIN guion bajo
+#         # Encontrar índices de features
+#     zcr_indices = get_indices_for_feature('zcr_mean')
+#     rms_indices = get_indices_for_feature('rms_mean')
+#     mfcc4_indices = get_indices_for_feature('mfcc4_mean')
+
+#     # # Verificamos que encontramos columnas para plotear
+#     # if not all([zcr_indices, rolloff_indices, mfcc4_indices]):
+#     #     print("\n❌ Error de ploteo: No se encontraron suficientes columnas.")
+#     #     print("   Ajusta los nombres de features en la función 'get_indices_for_feature'.")
+#     #     return
+#         # Verificar que encontramos columnas
+#     if not all([zcr_indices, rms_indices, mfcc4_indices]):
+#         print("\n❌ Error de ploteo: No se encontraron suficientes columnas.")
+#         return
+
+#     # # Calculamos la desviación estándar a través de los segmentos
+#     # f1_data = np.std(X_scaled[:, zcr_indices], axis=1, ddof=1)
+#     # f2_data = np.std(X_scaled[:, rolloff_indices], axis=1, ddof=1)
+#     # f3_data = np.std(X_scaled[:, mfcc4_indices], axis=1, ddof=1)
+    
+#     # f1_name = "zcr_std"
+#     # f2_name = "rms_std"        # ✅ CAMBIAR etiqueta
+#     # f3_name = "mfcc4_std"
+#         # ✅ CAMBIO: Calcular PROMEDIOS a través de los segmentos (en lugar de std)
+#     f1_data = np.mean(X_scaled[:, zcr_indices], axis=1)
+#     f2_data = np.mean(X_scaled[:, rms_indices], axis=1)
+#     f3_data = np.mean(X_scaled[:, mfcc4_indices], axis=1)
+    
+#     f1_name = "zcr_mean_avg"      # ✅ Cambio de nombre
+#     f2_name = "rms_mean_avg"      # ✅ Cambio de nombre
+#     f3_name = "mfcc4_mean_avg"    # ✅ Cambio de nombre
+
+#     # --- Graficar (SIN GUARDAR) ---
+#     fig = plt.figure(figsize=(10, 8))
+#     ax = fig.add_subplot(111, projection='3d')
+
+#     labels = np.unique(y_all)
+#     markers = ['o', '^', 's', 'D', 'v']
+#     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+
+#     for i, label in enumerate(labels):
+#         mask = (y_all == label)
+#         ax.scatter(f1_data[mask], 
+#                    f2_data[mask], 
+#                    f3_data[mask], 
+#                    c=colors[i % len(colors)],
+#                    marker=markers[i % len(markers)],
+#                    s=50, 
+#                    label=f'{label} (n={mask.sum()})',
+#                    depthshade=True,
+#                    alpha=0.7)
+
+#     ax.set_xlabel(f'{f1_name}')
+#     ax.set_ylabel(f'{f2_name}')
+#     ax.set_zlabel(f'{f3_name}')
+#     ax.set_title(title)
+#     ax.legend()
+#     ax.grid(True)
+    
+#     ax.view_init(elev=20., azim=-60)
+#     plt.tight_layout()
+    
+#     print("✅ Mostrando gráfico 3D (cerrar ventana para continuar)...")
+#     plt.show()
 # ===============================
 # Main - ENTRENAR Y GUARDAR
 # ===============================
@@ -356,6 +445,9 @@ def main():
     print("="*50 + "\n")
     scaler_final = Standardizer().fit(X_all)
     X_scaled = scaler_final.transform(X_all)
+    
+    # --- Llamada a la función de ploteo ---
+    #plot_3d_scatter(X_scaled, y_all, kept_cols) # <-- AÑADIR ESTA LÍNEA
 
     knn = KNNPuro(n_neighbors=K_NEIGHBORS, p=MINKOWSKI_P, weighted=WEIGHTED)
     knn.fit(X_scaled, y_all)
