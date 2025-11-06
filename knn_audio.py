@@ -1,39 +1,31 @@
-# knn_audio.py — KNN puro (sin sklearn)
+
 import pandas as pd
 import numpy as np
 import re
 from pathlib import Path
 from collections import Counter, defaultdict
-import joblib
-import matplotlib.pyplot as plt  # <-- AÑADIR
-from mpl_toolkits.mplot3d import Axes3D  # <-- AÑADIR
 
-# ===============================
-# Config
-# ===============================
 CSV_PATH = Path("base_datos/features_audio.csv")
 TARGET = "clase"
-FEATURE_REGEX = r"^s\d+_"   # ej.: s1_mean, s2_rms, etc.
-VAR_THR = 1e-6              # umbral para eliminar columnas casi constantes
+FEATURE_REGEX = r"^s\d+_"  
+VAR_THR = 1e-6              
 TEST_SIZE = 0.20
 RANDOM_STATE = 42
 K_NEIGHBORS = 7
 MINKOWSKI_P = 2            # p=2 Euclídea, p=1 Manhattan
-WEIGHTED = True             # votos ponderados 1/(dist+eps)
+WEIGHTED = True   
 
-# ===============================
-# Utilidades sin sklearn
-# ===============================
+
 rng = np.random.default_rng(RANDOM_STATE)
 
 def variance_threshold(X_df: pd.DataFrame, thr: float):
     """Filtra columnas con varianza < thr. Devuelve (X_filtrado, kept_cols)."""
     if X_df.shape[1] == 0:
         return X_df, []
-    var = X_df.var(axis=0, ddof=0)  # ddof=0 (poblacional) como hace sklearn
+    var = X_df.var(axis=0, ddof=0)  
     kept_cols = var[var >= thr].index.tolist()
     if len(kept_cols) == 0:
-        return X_df, X_df.columns.tolist()  # fallback: no filtrar nada
+        return X_df, X_df.columns.tolist() 
     return X_df[kept_cols].copy(), kept_cols
 
 class Standardizer:
@@ -54,17 +46,14 @@ def stratified_train_test_split(X, y, test_size=0.2, random_state=RANDOM_STATE):
     n = len(y)
     idx_all = np.arange(n)
 
-    # ¿Se puede estratificar?
     uniques, counts = np.unique(y, return_counts=True)
     if counts.min() < 2:
-        # split simple
         perm = rng.permutation(n)
         n_test = max(1, int(round(n * test_size)))
         test_idx = perm[:n_test]
         train_idx = perm[n_test:]
         return train_idx, test_idx, False
 
-    # estratificado
     per_class_indices = {c: idx_all[y == c] for c in uniques}
     test_idx_list = []
     train_idx_list = []
@@ -77,7 +66,6 @@ def stratified_train_test_split(X, y, test_size=0.2, random_state=RANDOM_STATE):
     test_idx = np.concatenate(test_idx_list)
     train_idx = np.concatenate(train_idx_list)
 
-    # mezclar cada conjunto para que no queden ordenados por clase
     test_idx = test_idx[rng.permutation(len(test_idx))]
     train_idx = train_idx[rng.permutation(len(train_idx))]
     return train_idx, test_idx, True
@@ -114,7 +102,6 @@ def classification_report(y_true, y_pred, labels, zero_division=0):
         f1s.append(f1)
         lines.append(f"{str(lab):<20} {prec:10.3f} {rec:10.3f} {f1:10.3f} {support[i]:8d}")
 
-    # promedios
     support_total = support.sum()
     macro_p = np.mean(precisions) if len(precisions) else 0
     macro_r = np.mean(recalls) if len(recalls) else 0
@@ -134,9 +121,7 @@ def classification_report(y_true, y_pred, labels, zero_division=0):
         "support_total": support_total,
     }, "\n".join(lines)
 
-# ===============================
-# KNN puro
-# ===============================
+
 class KNNPuro:
     def __init__(self, n_neighbors=5, p=2, weighted=True, eps=1e-8):
         self.k = int(n_neighbors)
@@ -154,7 +139,6 @@ class KNNPuro:
         return self
 
     def _distances(self, x):
-        # Distancia de Minkowski general; optimizo casos p=1 y p=2
         diff = self.X_train - x
         if self.p == 2:
             return np.sqrt((diff * diff).sum(axis=1))
@@ -166,16 +150,13 @@ class KNNPuro:
     def _vote(self, idx, dist):
         vecinos = self.y_train[idx]
         d = dist[idx]
-        # Si hay distancias 0, votar entre esos (evita infinitos)
         zeros = np.where(d <= self.eps)[0]
         if len(zeros) > 0:
-            # mayoría simple entre empates perfectos
             return Counter(vecinos[zeros]).most_common(1)[0][0]
 
         if not self.weighted:
             return Counter(vecinos).most_common(1)[0][0]
 
-        # Votos ponderados 1/(d+eps)
         pesos = 1.0 / (d + self.eps)
         acumulado = defaultdict(float)
         for cls, w in zip(vecinos, pesos):
@@ -201,98 +182,9 @@ class KNNPuro:
         return np.array(preds)
 
 
-# ===============================
-# Plotting
-# ===============================
-# def plot_3d_scatter(X_scaled, y_all, feature_names, title="Scatter 3D (audio)"):
-#     """
-#     Crea un gráfico de dispersión 3D.
-#     Calcula 3 features agregados únicamente para la visualización.
-#     """
-#     print("\n📊 Generando gráfico 3D de distribución de clases...")
 
-#     def get_indices_for_feature(base_name):
-#         """Encuentra los índices de las columnas para un tipo de feature en todos los segmentos."""
-#         indices = [i for i, name in enumerate(feature_names) if base_name in name and name.startswith('s')]
-#         print(f"   Buscando '{base_name}': encontrados {len(indices)} índices")
-#         if len(indices) > 0:
-#             print(f"      Ejemplo: {feature_names[indices[0]]}")
-#         return indices
-
-#     # # ✅ CORREGIR ESTOS NOMBRES:
-#     # zcr_indices = get_indices_for_feature('zcr_mean')      # Ya funciona
-#     # rolloff_indices = get_indices_for_feature('rms_mean')  # ✅ CAMBIAR a rms_mean
-#     # mfcc4_indices = get_indices_for_feature('mfcc4_mean')  # ✅ SIN guion bajo
-#         # Encontrar índices de features
-#     zcr_indices = get_indices_for_feature('zcr_mean')
-#     rms_indices = get_indices_for_feature('rms_mean')
-#     mfcc4_indices = get_indices_for_feature('mfcc4_mean')
-
-#     # # Verificamos que encontramos columnas para plotear
-#     # if not all([zcr_indices, rolloff_indices, mfcc4_indices]):
-#     #     print("\n❌ Error de ploteo: No se encontraron suficientes columnas.")
-#     #     print("   Ajusta los nombres de features en la función 'get_indices_for_feature'.")
-#     #     return
-#         # Verificar que encontramos columnas
-#     if not all([zcr_indices, rms_indices, mfcc4_indices]):
-#         print("\n❌ Error de ploteo: No se encontraron suficientes columnas.")
-#         return
-
-#     # # Calculamos la desviación estándar a través de los segmentos
-#     # f1_data = np.std(X_scaled[:, zcr_indices], axis=1, ddof=1)
-#     # f2_data = np.std(X_scaled[:, rolloff_indices], axis=1, ddof=1)
-#     # f3_data = np.std(X_scaled[:, mfcc4_indices], axis=1, ddof=1)
-    
-#     # f1_name = "zcr_std"
-#     # f2_name = "rms_std"        # ✅ CAMBIAR etiqueta
-#     # f3_name = "mfcc4_std"
-#         # ✅ CAMBIO: Calcular PROMEDIOS a través de los segmentos (en lugar de std)
-#     f1_data = np.mean(X_scaled[:, zcr_indices], axis=1)
-#     f2_data = np.mean(X_scaled[:, rms_indices], axis=1)
-#     f3_data = np.mean(X_scaled[:, mfcc4_indices], axis=1)
-    
-#     f1_name = "zcr_mean_avg"      # ✅ Cambio de nombre
-#     f2_name = "rms_mean_avg"      # ✅ Cambio de nombre
-#     f3_name = "mfcc4_mean_avg"    # ✅ Cambio de nombre
-
-#     # --- Graficar (SIN GUARDAR) ---
-#     fig = plt.figure(figsize=(10, 8))
-#     ax = fig.add_subplot(111, projection='3d')
-
-#     labels = np.unique(y_all)
-#     markers = ['o', '^', 's', 'D', 'v']
-#     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
-
-#     for i, label in enumerate(labels):
-#         mask = (y_all == label)
-#         ax.scatter(f1_data[mask], 
-#                    f2_data[mask], 
-#                    f3_data[mask], 
-#                    c=colors[i % len(colors)],
-#                    marker=markers[i % len(markers)],
-#                    s=50, 
-#                    label=f'{label} (n={mask.sum()})',
-#                    depthshade=True,
-#                    alpha=0.7)
-
-#     ax.set_xlabel(f'{f1_name}')
-#     ax.set_ylabel(f'{f2_name}')
-#     ax.set_zlabel(f'{f3_name}')
-#     ax.set_title(title)
-#     ax.legend()
-#     ax.grid(True)
-    
-#     ax.view_init(elev=20., azim=-60)
-#     plt.tight_layout()
-    
-#     print("✅ Mostrando gráfico 3D (cerrar ventana para continuar)...")
-#     plt.show()
-# ===============================
-# Main - ENTRENAR Y GUARDAR
-# ===============================
 def main():
     print("🚀 Iniciando entrenamiento de K-NN para audio...\n")
-    # === 1) Cargar ===
     if not CSV_PATH.exists():
         raise FileNotFoundError(f"No se encontró el CSV en: {CSV_PATH.resolve()}")
     df_raw = pd.read_csv(CSV_PATH)
@@ -301,7 +193,6 @@ def main():
     if TARGET not in df_raw.columns:
         raise ValueError(f"No se encontró la columna objetivo '{TARGET}' en el CSV.")
 
-    # === 2) Selección de columnas de features ===
     feat_cols = [c for c in df_raw.columns if re.match(FEATURE_REGEX, c)]
     if not feat_cols:
         aux = {"id", "path_rel", TARGET}
@@ -310,7 +201,7 @@ def main():
               f"{FEATURE_REGEX}. Uso fallback: {len(feat_cols)} columnas numéricas.")
     print(f"✔ Features seleccionados: {len(feat_cols)} columnas")
 
-    # === 3) Dedupe por path/id (si existen) antes de limpiar ===
+
     df = df_raw.copy()
     if "path_rel" in df.columns:
         before = len(df)
@@ -321,10 +212,9 @@ def main():
         df = df.drop_duplicates(subset=["id"], keep="first")
         print(f"✓ Deduplicado por id: {before} -> {len(df)}")
 
-    # Mantener una copia con metadatos ANTES de eliminar columnas auxiliares
+
     df_with_meta = df.copy()
 
-    # Descarta auxiliares que no son features del modelo
     df = df.drop(columns=[c for c in ["id", "path_rel"] if c in df.columns], errors="ignore")
 
     

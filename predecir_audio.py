@@ -11,8 +11,6 @@ from pathlib import Path
 import sys
 from collections import Counter, defaultdict
 
-# Importamos las funciones de los otros scripts para reutilizar la lógica
-# Asegúrate de que estos archivos estén en la misma carpeta
 try:
     from procesar_audio import (
         to_mono,
@@ -36,14 +34,8 @@ except ImportError:
     print("❌ Error: Asegúrate de que 'procesar_audio.py' y 'cualidades_audio.py' estén en la misma carpeta.")
     sys.exit(1)
 
-# ===============================
-# Configuración
-# ===============================
 MODEL_PATH = Path("models/knn_audio_puro.npz")
 
-# ===============================
-# Cargar Modelo
-# ===============================
 def cargar_modelo(model_path: Path): # ✅ AÑADIR el parámetro model_path
     """Carga el modelo K-NN entrenado y los metadatos de normalización."""
     if not model_path.exists(): # ✅ USAR el parámetro
@@ -65,23 +57,11 @@ def cargar_modelo(model_path: Path): # ✅ AÑADIR el parámetro model_path
         'weighted': bool(data['weighted'])
     }
 
-# ===============================
-# Pipeline Completo (Procesamiento + Extracción)
-# ===============================
 def pipeline_completo_audio(audio_path: Path) -> np.ndarray:
-    """
-    Aplica el pipeline completo a UN archivo de audio.
-    1. Lee y normaliza (procesar_audio.py)
-    2. Extrae features (cualidades_audio.py)
-    Retorna un vector de 140 features.
-    """
-    # --- 1. Leer y Normalizar (lógica de procesar_audio.py) ---
-    # ✅ 2. USAR LA FUNCIÓN INTELIGENTE
+
     y, sr = smart_read_any(audio_path, ffmpeg_bin=None)
 
-    # ✅ 3. SIMPLIFICAR: smart_read_any ya convierte a mono,
-    #    así que la siguiente línea ya no es necesaria.
-    # y = to_mono(y) 
+
     
     if sr != TARGET_SR:
         y = rational_resample(y, sr, TARGET_SR)
@@ -109,9 +89,7 @@ def pipeline_completo_audio(audio_path: Path) -> np.ndarray:
         
     return np.array(features_vector, dtype=np.float32)
 
-# ===============================
-# Predicción KNN
-# ===============================
+
 def predecir_knn(features: np.ndarray, modelo: dict) -> tuple[str, float]:
     """Predice la clase usando el modelo K-NN puro."""
     # Normalizar features con la media y std del entrenamiento
@@ -146,9 +124,7 @@ def predecir_knn(features: np.ndarray, modelo: dict) -> tuple[str, float]:
     
     return clase_pred, float(np.mean(distancias_vecinos))
 
-# ===============================
-# Main
-# ===============================
+
 def main():
     if len(sys.argv) < 2:
         print(f"Uso: python {sys.argv[0]} ruta/a/audio.wav")
