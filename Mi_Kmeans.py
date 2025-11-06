@@ -16,8 +16,8 @@ import joblib
 # =========================
 CSV_DEFAULT_NAME = "cualidades_imagenes.csv"
 CSV_OUT = "Mi_features_clusterizados2.csv"
-SCALER_OUT = "Mi_scaler_kmeans2.joblib"             # guardamos metadatos del escalado interno
-MODEL_OUT = "Mi_kmeans_mbkmeans2.joblib"            # guardamos el objeto KMeans puro
+SCALER_OUT = "models/Mi_scaler_kmeans2.joblib"             # guardamos metadatos del escalado interno
+MODEL_OUT = "models/Mi_kmeans_mbkmeans2.joblib"            # guardamos el objeto KMeans puro
 RANDOM_STATE = 42
 MAX_SILH_SAMPLES = 5000
 CLASS_ORDER = ['Arandela', 'Tuerca', 'Tornillo', 'Clavo']
@@ -67,8 +67,7 @@ def resolve_csv_path(cli_csv: str | None):
 def build_class_prototypes(
     df: pd.DataFrame,
     cols=('hu1_log','hu2_log','ar2'),
-    class_order=CLASS_ORDER,
-    mode: str = 'mean'  # 'mean' | 'medoid' | 'sample'
+    class_order=CLASS_ORDER
 ) -> tuple[np.ndarray, list[str]]:
     """
     Devuelve (seeds, used_classes) donde:
@@ -82,21 +81,11 @@ def build_class_prototypes(
         if g.empty:
             continue
         Xg = g[list(cols)].to_numpy(dtype=float)
-        if mode == 'mean':
-            seeds.append(Xg.mean(axis=0))
-            used.append(cls)
-        elif mode == 'medoid':
-            mu = Xg.mean(axis=0)
-            idx = int(np.argmin(((Xg - mu)**2).sum(axis=1)))
-            seeds.append(Xg[idx])
-            used.append(cls)
-        elif mode == 'sample':
-            rng = np.random.default_rng(RANDOM_STATE)
-            idx = int(rng.integers(0, Xg.shape[0]))
-            seeds.append(Xg[idx])
-            used.append(cls)
-        else:
-            raise ValueError("mode debe ser 'mean' | 'medoid' | 'sample'")
+        # Forzamos el modo 'medoid' (punto real más cercano a la media)
+        mu = Xg.mean(axis=0)
+        idx = int(np.argmin(((Xg - mu)**2).sum(axis=1)))
+        seeds.append(Xg[idx])
+        used.append(cls)
     if not seeds:
         return np.empty((0, len(cols))), []
     return np.vstack(seeds), used
@@ -465,38 +454,21 @@ class KMeans:
 
     # ===== Inicialización =====
     def _init_centroids(self, Xs: Array, rng: np.random.Generator) -> Array:
-        n, d = Xs.shape
-        k = self.n_clusters
+            n, d = Xs.shape
+            k = self.n_clusters
 
-        # Centroides provistos por el usuario (EN ESCALA ORIGINAL)
-        if isinstance(self.init, np.ndarray):
-            C = np.asarray(self.init, dtype=np.float64)
-            if C.shape != (k, d):
-                raise ValueError(f"init array debe tener shape ({k},{d}), recibido {C.shape}")
-            if self._scale_kind is not None:
-                C = (C - self._shift_) / self._scale_
-            return C.copy()
+            # Centroides provistos por el usuario (EN ESCALA ORIGINAL)
+            if isinstance(self.init, np.ndarray):
+                C = np.asarray(self.init, dtype=np.float64)
+                if C.shape != (k, d):
+                    raise ValueError(f"init array debe tener shape ({k},{d}), recibido {C.shape}")
+                if self._scale_kind is not None:
+                    # Aplicamos el escalado a las semillas
+                    C = (C - self._shift_) / self._scale_
+                return C.copy()
 
-        if self.init == "random":
-            if k > n:
-                raise ValueError(f"n_clusters={k} > n_samples={n}.")
-            idx = rng.choice(n, size=k, replace=False)
-            return Xs[idx].astype(np.float64, copy=True)
-
-        if self.init == "k-means++":
-            centers = np.empty((k, d), dtype=np.float64)
-            idx0 = int(rng.integers(0, n))
-            centers[0] = Xs[idx0]
-            closest_d2 = self._pairwise_sq_dists(Xs, centers[0:1]).ravel()
-            for j in range(1, k):
-                probs = closest_d2 / closest_d2.sum()
-                next_idx = int(rng.choice(n, p=probs))
-                centers[j] = Xs[next_idx]
-                d2_new = self._pairwise_sq_dists(Xs, centers[j:j+1]).ravel()
-                closest_d2 = np.minimum(closest_d2, d2_new)
-            return centers
-
-        raise ValueError("init debe ser 'random' o 'k-means++' o ndarray.")
+            # Si no se proveyó un ndarray, es un error en este script simplificado.
+            raise ValueError("Este script está configurado para inicializar solo desde 'seeds' (un ndarray).")
 
     # ===== Utilidades numéricas / escalado =====
     @staticmethod
@@ -630,15 +602,6 @@ def auto_k_silhouette(
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", type=str, default=None, help="Ruta al CSV de features.")
-    ap.add_argument("--auto-k", type=str, default="true",
-                    help="true/false: usar silhouette SOLO si NO hay etiquetas.")
-    ap.add_argument("--k", type=int, default=4, help="K manual si --auto-k=false.")
-    ap.add_argument("--kmin", type=int, default=2)
-    ap.add_argument("--kmax", type=int, default=7)
-    ap.add_argument("--seed-mode", type=str, default="medoid",
-                    help="How to construir semillas: mean | medoid | sample")
-    ap.add_argument("--map-by-index", type=str, default="true",
-                    help="true/false: fijar mapeo cluster->clase por índice según CLASS_ORDER")
     args = ap.parse_args()
 
 
@@ -664,9 +627,7 @@ def main():
     df['hu2_log'] = log_transform_hu(df['hu2'].values)
     X = df[['hu1_log', 'hu2_log', 'ar2']].values
 
-    # Elegir K
-    use_auto = _as_bool(args.auto_k)
-    map_by_index = _as_bool(args.map_by_index)
+
     batch_size = min(512, max(64, X.shape[0] // 8))
 
     have_labels = ('clase' in df.columns) and (df['clase'].notna().any())
@@ -674,14 +635,13 @@ def main():
     if have_labels:
         # 1) Construir semillas con datos etiquetados (ESCALA ORIGINAL)
         seeds, used_classes = build_class_prototypes(
-            df, cols=('hu1_log','hu2_log','ar2'),
-            class_order=CLASS_ORDER,
-            mode=args.seed_mode.strip().lower()
+        df, cols=('hu1_log','hu2_log','ar2'),
+        class_order=CLASS_ORDER
         )
         if seeds.shape[0] == 0:
             raise ValueError("No hay clases con datos suficientes para construir semillas.")
         K = seeds.shape[0]
-        print(f"\nSemillas construidas a partir de etiquetas (mode={args.seed_mode}):")
+        print(f"\nSemillas construidas a partir de etiquetas (mode='medoid'):")
         for i, (cls, v) in enumerate(zip(used_classes, seeds)):
             print(f"  {i:>2} -> {cls:<9}  [{v[0]: .3f}, {v[1]: .3f}, {v[2]: .3f}]")
 
@@ -701,67 +661,12 @@ def main():
         )
         labels = kmeans.fit_predict(X)
 
-        # 3) Mapeo cluster→clase
-        if map_by_index:
-            # Índices en el MISMO orden en que construimos 'seeds'
-            mayoritaria = {i: cls for i, cls in enumerate(used_classes)}
-        else:
-            mayoritaria = assign_clusters_one_to_one(pd.DataFrame({
-                'cluster': labels,
-                'clase': df['clase']  # usa tus etiquetas reales
-            }))
-    else:
-        # No hay etiquetas -> flujo original con auto-K/silhouette
-        if use_auto:
-            K, best_s, silh_scores = auto_k_silhouette(
-                X,
-                kmin=args.kmin,
-                kmax=args.kmax,
-                random_state=RANDOM_STATE,
-                max_samples=MAX_SILH_SAMPLES,
-                init="k-means++",
-                n_init=10,
-                scale="minmax",
-                method="minibatch",
-                batch_size=batch_size,
-                max_no_improvement=20,
-                empty_action="farthest",
-                verbose=False
-            )
-            print("Silhouette por K:", silh_scores)
-            print(f"→ K seleccionado automáticamente: {K} (silhouette={best_s:.4f})")
-        else:
-            K = int(args.k)
-            print(f"→ K fijado manualmente: {K}")
-
-        kmeans = KMeans(
-            n_clusters=K,
-            init="k-means++",
-            n_init=10,
-            scale="minmax",
-            method="minibatch",
-            batch_size=batch_size,
-            max_no_improvement=30,
-            empty_action="farthest",
-            random_state=RANDOM_STATE,
-            verbose=False
-        )
-        labels = kmeans.fit_predict(X)
-        mayoritaria = assign_clusters_one_to_one(pd.DataFrame({
-            'cluster': labels,
-            'clase': df['clase'] if 'clase' in df.columns else None
-        }))
-
-    df['cluster'] = labels
-# Solo recalcular si NO estamos mapeando por índice
-    if not (have_labels and map_by_index):
+        df['cluster'] = labels
+        # Asignación 1-a-1 cluster→clase (si hay 'clase')
         mayoritaria = assign_clusters_one_to_one(df)
 
-    # Asignación 1-a-1 cluster→clase (si hay 'clase')
-    mayoritaria = assign_clusters_one_to_one(df)
-
-    # Gráficos 2D + 3D
-    plot_2d_and_3d(df, labels, kmeans, mayoritaria)
+        # Gráficos 2D + 3D
+        plot_2d_and_3d(df, labels, kmeans, mayoritaria)
 
     # Guardados (igual interfaz que antes)
     columnas_deseadas = ['file', 'clase', 'hu1_log', 'hu2_log', 'ar2', 'cluster']

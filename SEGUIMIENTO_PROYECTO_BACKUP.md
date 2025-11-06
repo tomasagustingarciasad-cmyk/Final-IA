@@ -1158,181 +1158,69 @@ sounddevice
 
 ---
 
-## 💻 DEPENDENCIAS DEL PROYECTO
+## ⚠️ RIESGOS Y ALERTAS
 
-### Librerías instaladas y utilizadas:
-```python
-# Procesamiento de imágenes
-opencv-python (cv2)       # Pipeline de preprocesamiento
-numpy                     # Arrays y operaciones matemáticas
+### 🔴 Riesgos ALTOS:
+1. **Dataset muy pequeño** (40 imágenes) → Overfitting probable
+2. **Módulo de voz 0%** → Mayor esfuerzo requerido
+3. **No hay implementación propia de K-Means/K-NN** → Requisito del TP
 
-# Procesamiento de audio
-librosa                   # Extracción de features (MFCC, ZCR, RMS)
-soundfile                 # Lectura/escritura de archivos de audio
-scipy                     # Filtros digitales, resampling
+### 🟡 Riesgos MEDIOS:
+1. Falta de validación cruzada
+2. No hay sistema integrado
+3. Documentación incompleta
 
-# Machine Learning (solo para utilidades, no para algoritmos core)
-# K-Means y K-NN: IMPLEMENTADOS SIN SKLEARN ✅
-
-# Servidor web
-flask                     # Backend servidor HTTP
-
-# Visualización
-matplotlib                # Gráficos 2D/3D
-
-# Datos
-pandas                    # Manipulación de CSVs
-joblib                    # Serialización de modelos
-
-# Sistema
-pathlib                   # Manejo de rutas multiplataforma
-```
-
-### Herramientas externas:
-- **ngrok**: Túnel HTTPS para acceso remoto al servidor
-- **FFmpeg** (opcional): Decodificación de formatos de audio no estándar
+### 🟢 Fortalezas:
+1. ✅ Preprocesamiento de imágenes robusto
+2. ✅ Extracción de características bien pensada
+3. ✅ Código organizado y modular
+4. ✅ Visualizaciones útiles
 
 ---
 
-## 🚀 ROADMAP CUMPLIDO
+## 📞 CONSULTAS PENDIENTES CON EL DOCENTE
 
-### ✅ Semana 1 (2-8 Nov):
-- ✅ Implementar K-Means desde cero
-- ✅ Implementar K-NN desde cero
-- ✅ Ampliar dataset de imágenes a 141
-
-### ✅ Semana 2:
-- ✅ Capturar y procesar 72 audios
-- ✅ Integrar K-NN con reconocimiento de voz
-- ✅ Implementar clasificador Bayesiano
-
-### ✅ Semana 3:
-- ✅ Sistema integrado completo con Flask
-- ✅ Frontend HTML/JS funcional
-- ✅ Integración con ngrok
-- ✅ Testing end-to-end exitoso
-
-### 🟡 Semana 4 (En curso):
-- 🟡 Documentación final
-- 🟡 Informe técnico
-- 🟡 Presentación
-- 🟡 Video demo
+- [ ] Confirmar si K-Means/K-NN deben ser 100% propios o si sklearn está permitido
+- [ ] Aclarar requisitos específicos del clasificador Bayesiano
+- [ ] Confirmar formato de entrega (código + informe + presentación)
+- [ ] Consultar sobre dataset mínimo aceptable
 
 ---
 
-## 🎯 EVALUACIÓN DE RIESGOS ACTUALIZADA
+## 💾 BACKUP Y CONTROL DE VERSIONES
 
-### ✅ Riesgos RESUELTOS:
-1. ~~Dataset muy pequeño~~ → **141 imágenes, 72 audios (suficiente)**
-2. ~~Módulo de voz 0%~~ → **K-NN propio completado al 100%**
-3. ~~No hay implementación propia~~ → **K-Means y K-NN implementados desde cero**
-4. ~~No hay sistema integrado~~ → **App Flask funcional con ngrok**
-
-### 🟡 Riesgos MEDIOS (controlados):
-1. **Documentación incompleta** → En progreso, 60% completado
-2. **Distribución desbalanceada** → Tornillos (34.8%) vs Arandela (17%)
-3. **Variedad de voces limitada** → 1-2 personas en dataset de audio
-
-### 🟢 Fortalezas CONSOLIDADAS:
-1. ✅ Algoritmos propios funcionando en producción
-2. ✅ Pipelines robustos y bien documentados
-3. ✅ Sistema end-to-end funcional
-4. ✅ Código modular y mantenible
-5. ✅ Integración completa cliente-servidor
-6. ✅ Clasificador Bayesiano con visualización en tiempo real
+- [ ] Configurar `.gitignore` apropiado
+- [ ] Hacer commits frecuentes con mensajes descriptivos
+- [ ] Crear branches para features grandes
+- [ ] Tag de versión final antes de entregar
+- [ ] Backup en la nube (Google Drive, OneDrive, etc.)
 
 ---
 
-## � MÉTRICAS DE RENDIMIENTO
-
-### K-Means (Imágenes):
-```
-Dataset: 141 imágenes
-Features: 3D (hu1_log, hu2_log, ar2)
-Clusters: 4 (uno por clase)
-Escalado: MinMax interno
-Convergencia: ~10-20 iteraciones
-Tiempo de entrenamiento: <5 segundos
-Tiempo de predicción: <100ms por imagen
-```
-
-### K-NN (Audio):
-```
-Dataset: 72 audios (split 80/20 para evaluación)
-Features: 140D (14 × 10 segmentos)
-K vecinos: 7
-Distancia: Euclídea (L2)
-Precisión estimada: ~95% (split validation)
-Tiempo de predicción: <200ms por audio
-```
-
-### Sistema Integrado:
-```
-Latencia imagen (foto → resultado): ~1-2 segundos
-Latencia audio (grabación → resultado): ~2-3 segundos
-Uptime del servidor: Estable con Flask
-Concurrencia: Soporta múltiples usuarios (Flask threaded)
-```
+**Última actualización:** 2 de noviembre de 2025  
+**Próxima revisión:** Diaria hasta la entrega
 
 ---
 
-## 🎓 CONCLUSIÓN DEL ANÁLISIS ACTUALIZADO
+## 🎓 CONCLUSIÓN DEL ANÁLISIS
 
-### Estado actual: **90% completado** ✅
+### Estado actual: **55% completado**
 
-**Logros destacados:**
-- ✅ Sistema funcional end-to-end desplegado
-- ✅ Algoritmos propios (K-Means, K-NN) implementados y validados
-- ✅ Clasificador Bayesiano con visualización interactiva
-- ✅ Dataset adecuado para demostración del concepto
-- ✅ Aplicación web accesible desde celular vía HTTPS
+**Puntos fuertes:**
+- Excelente trabajo en preprocesamiento de imágenes
+- Buena extracción de características
+- Visualizaciones útiles y claras
 
-**Tareas finales (10% restante):**
-1. 🟡 Documentación técnica formal (README + Informe PDF)
-2. 🟡 Video demostrativo del sistema funcionando
-3. 🟡 Preparación de presentación oral
-4. 🟡 Métricas de validación adicionales (opcional)
+**Áreas críticas que requieren atención inmediata:**
+1. ⚠️ Implementar algoritmos desde cero (K-Means, K-NN)
+2. ⚠️ Desarrollar completamente el módulo de reconocimiento de voz
+3. ⚠️ Ampliar significativamente el dataset
+4. ⚠️ Crear sistema integrado
 
-**Evaluación final:**
-El proyecto cumple con **TODOS** los requisitos del trabajo práctico:
-- ✅ Agente inteligente funcional
-- ✅ K-Means implementado desde cero
-- ✅ K-NN implementado desde cero
-- ✅ Clasificador Bayesiano operativo
-- ✅ Sistema integrado completo
-- 🟡 Documentación en progreso
+**Recomendación:** 
+Enfocarse en los próximos 7 días en:
+1. Algoritmos propios (K-Means y K-NN)
+2. Ampliación del dataset
+3. Inicio del módulo de audio
 
-**Estado de viabilidad:** ✅ **PROYECTO LISTO PARA ENTREGA**
-
-Con la documentación pendiente completada, el proyecto está en condiciones óptimas para:
-- Demostración en vivo
-- Evaluación académica
-- Presentación oral
-- Defensa técnica
-
----
-
-**Última actualización:** 6 de noviembre de 2025  
-**Próxima revisión:** Antes de la entrega final
-
----
-
-## 📝 NOTAS FINALES
-
-### Lecciones aprendidas:
-1. **Implementación propia vs librerías:** Implementar K-Means y K-NN desde cero proporcionó comprensión profunda de los algoritmos
-2. **Preprocesamiento crítico:** El 80% del éxito está en la calidad del preprocesamiento
-3. **Modularidad:** Código organizado en módulos facilita debugging y extensión
-4. **ngrok:** Solución elegante para acceso remoto sin configuración de red compleja
-
-### Posibles extensiones futuras:
-- Agregar más clases de piezas (tuercas cuadradas, tornillos de diferentes tipos)
-- Implementar reconocimiento en tiempo real con video streaming
-- Dashboard web con estadísticas y gráficos históricos
-- API REST documentada con Swagger
-- Modelo de deep learning para comparación (CNN)
-- App móvil nativa (React Native / Flutter)
-
----
-
-**🎉 FIN DEL SEGUIMIENTO DEL PROYECTO 🎉**
+Con trabajo constante y enfocado, el proyecto es **COMPLETAMENTE VIABLE** ✅

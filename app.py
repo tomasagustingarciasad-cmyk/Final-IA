@@ -6,6 +6,7 @@ from collections import deque, Counter
 import numpy as np
 from threading import Timer
 import shutil
+import threading
 # --- Importamos la lógica de nuestros scripts de predicción ---
 # (Asegúrate de que los archivos .py estén en la misma carpeta)
 try:
@@ -22,6 +23,12 @@ try:
         pipeline_completo_audio,
         predecir_knn
     )
+    from estimador_bayesiano import (
+    estimar_caja, 
+    calcular_evolucion_probabilidades,
+    generar_grafico_evolucion_local,  # <--- CAMBIO
+    imprimir_tabla_evolucion         # <--- CAMBIO
+    )
 except ImportError as e:
     print(f"❌ Error al importar los módulos de predicción: {e}")
     print("Asegurate de que 'predecir_imagenes.py' y 'predecir_audio.py' estén en la misma carpeta que 'app.py'")
@@ -36,9 +43,11 @@ Path(app.config['UPLOAD_FOLDER']).mkdir(exist_ok=True)
 
 # --- NUEVO: Definimos las carpetas de destino permanentes ---
 DIR_UPLOADS_ORIGINAL = Path("base_datos/subida")
+DIR_AUDIO_ORIGINAL = Path("base_datos/audio_subido")
 
 # --- NUEVO: Aseguramos que las carpetas existan al iniciar ---
 DIR_UPLOADS_ORIGINAL.mkdir(exist_ok=True)
+DIR_AUDIO_ORIGINAL.mkdir(exist_ok=True)
 
 # --- Cargar modelos al iniciar la app ---
 print("🧠 Cargando modelos al iniciar...")
@@ -85,9 +94,6 @@ def handle_predict_image():
     try:
         # Guardar el archivo temporalmente
         filename = secure_filename(file.filename)
-
-
-        
         filepath = Path(app.config['UPLOAD_FOLDER']) / filename
         file.save(filepath)
         original_save_path = DIR_UPLOADS_ORIGINAL / filename
@@ -97,6 +103,9 @@ def handle_predict_image():
         mask = procesar_imagen_completa(filepath)
         features, _ = extraer_features_img(mask)
         clase, _, _, _ = predecir_img(features, MODELO_IMAGEN)
+
+        # 🆕 LOGGING: Mostrar en la consola del servidor
+        print(f"📸 Imagen clasificada: {filename} → {clase}")
 
         # Guardar en memoria
         ultimas_piezas.append(clase)
@@ -130,10 +139,14 @@ def handle_predict_command():
         filename = secure_filename(file.filename)
         filepath = Path(app.config['UPLOAD_FOLDER']) / filename
         file.save(filepath)
-
+        original_audio_path = DIR_AUDIO_ORIGINAL / filename
+        shutil.copy(filepath, original_audio_path)
         # Predecir el comando usando la lógica importada
         features = pipeline_completo_audio(filepath)
         comando, _ = predecir_knn(features, MODELO_AUDIO)
+
+        # 🆕 LOGGING: Mostrar en la consola del servidor
+        print(f"🎤 Comando reconocido: {filename} → {comando}")
 
         # Limpiar archivo temporal
         os.remove(filepath)
@@ -151,26 +164,35 @@ def handle_predict_command():
 
         elif comando.lower() == 'proporcion':
             confirmacion_salir_pendiente = False
-            total = len(ultimas_piezas)
-            if total == 0:
-                resultado_comando = "No hay piezas para calcular proporción."
+            conteo_muestra = Counter(ultimas_piezas)
+            historial_piezas = list(ultimas_piezas) # El orden importa
+
+            if not historial_piezas:
+                resultado_comando = "No hay piezas en la muestra para estimar."
             else:
-                conteo = Counter(ultimas_piezas)
-                resultado_comando = "Proporción: " + ", ".join([f"{k}: {v/total:.0%}" for k, v in conteo.items()])
-        
-        # elif comando.lower() == 'salir':
-        #     if confirmacion_salir_pendiente:
-        #         # Si ya estábamos esperando confirmación, ahora sí apagamos.
-        #         resultado_comando = "Confirmado. Servidor apagándose..."
-        #         shutdown_func = request.environ.get('werkzeug.server.shutdown')
-        #         if shutdown_func is None:
-        #             resultado_comando = "Error: No se puede apagar el servidor (no es Werkzeug)."
-        #         else:
-        #             shutdown_func() # Apagar
-        #     else:
-        #         # Es la primera vez que dice "Salir". Pedimos confirmación.
-        #         confirmacion_salir_pendiente = True
-        #         resultado_comando = "¿Estás seguro? Di 'Salir' de nuevo para confirmar."
+                # 1. Estimación final (igual)
+                nombre_caja, definicion, prob_ganadora = estimar_caja(conteo_muestra)
+                # Creamos el string del porcentaje (ej: "(58.36%)")
+                porcentaje_str = f"({prob_ganadora:.2%})"
+
+                # Añadimos el porcentaje_str a la respuesta
+                props_str = ", ".join([f"{k}: {v}" for k, v in definicion.items()])
+                resultado_comando = f"Estimación Final: {nombre_caja} {porcentaje_str} ({props_str})"
+
+                # 2. Cálculo de evolución (igual)
+                print("-> Calculando evolución de probabilidades...")
+                datos_evolucion = calcular_evolucion_probabilidades(historial_piezas)
+
+                # 3. Imprimir tabla en la consola (llamada directa)
+                imprimir_tabla_evolucion(datos_evolucion)
+
+                # 4. Mostrar gráfico en un HILO SEPARADO (para no bloquear)
+                print("-> Lanzando gráfico en un hilo separado...")
+                thread_grafico = threading.Thread(
+                    target=generar_grafico_evolucion_local, 
+                    args=(datos_evolucion,)
+                )
+                thread_grafico.start()
         elif comando.lower() == 'salir':
             if confirmacion_salir_pendiente:
                 resultado_comando = "Confirmado. Servidor apagándose..."
@@ -183,7 +205,7 @@ def handle_predict_command():
             else:
                 # Es la primera vez que dice "Salir". Pedimos confirmación.
                  confirmacion_salir_pendiente = True
-                 resultado_comando = "¿Estás seguro? Di 'Salir' de nuevo para confirmar."
+                 resultado_comando = "¿Estás seguro? Decí 'Salir' de nuevo para confirmar."
 
         else:
             confirmacion_salir_pendiente = False

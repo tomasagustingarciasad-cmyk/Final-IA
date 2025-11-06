@@ -237,7 +237,6 @@ def procesar_archivo(path_img: Path, out_dir: Path, verbose: bool = True) -> boo
     if saved:
         return True
 
-    # Fallback: guardar sin alinear
     try:
         if out_path.exists():
             try:
@@ -268,21 +267,13 @@ def procesar_par(in_dir: Path, out_dir: Path) -> None:
         ok += 1 if procesar_archivo(path, out_dir, verbose=True) else 0
     print(f"Listo {in_dir.name}: {ok}/{total} guardadas en {out_dir}")
 
-
 def procesar_pares(pairs: List[Tuple[Path, Path]]) -> None:
     """Procesa una lista de pares (input_dir, output_dir)."""
     for in_dir, out_dir in pairs:
         procesar_par(in_dir, out_dir)
 
-
-# =========================
-# 4) Conveniencia para otros módulos
-# =========================
 def procesar_imagen_completa(img_path: Path) -> np.ndarray:
-    """
-    Conveniencia: devuelve la máscara final ALINEADA+RECORTADA **sin guardar**.
-    Útil para usar en inference (coincidir con las máscaras del dataset).
-    """
+    """Procesa UNA imagen y devuelve la máscara final alineada/recortada."""
     img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
     if img is None:
         raise ValueError(f"No se pudo leer la imagen: {img_path}")
@@ -290,10 +281,5 @@ def procesar_imagen_completa(img_path: Path) -> np.ndarray:
     final = alinear_recortar((fused > 0).astype(np.uint8) * 255)
     return (final > 0).astype(np.uint8) * 255
 
-
-# =========================
-# CLI simple
-# =========================
 if __name__ == "__main__":
-    # Procesa los pares por defecto (dataset completo)
     procesar_pares(PAIRS)
