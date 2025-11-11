@@ -26,8 +26,8 @@ try:
     from estimador_bayesiano import (
     estimar_caja, 
     calcular_evolucion_probabilidades,
-    generar_grafico_evolucion_local,  # <--- CAMBIO
-    imprimir_tabla_evolucion         # <--- CAMBIO
+    generar_grafico_evolucion_local, 
+    imprimir_tabla_evolucion        
     )
 except ImportError as e:
     print(f"❌ Error al importar los módulos de predicción: {e}")
@@ -219,9 +219,7 @@ def handle_predict_command():
     except Exception as e:
         return jsonify({'error': f'Error procesando el audio: {str(e)}'}), 500
 
-# ===============================
-# Iniciar la aplicación
-# ===============================
+
 if __name__ == '__main__':
     # host='0.0.0.0' permite que otros dispositivos en tu red (como tu celular) se conecten.
     app.run(host='0.0.0.0', port=5000, debug=True)
